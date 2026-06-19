@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Pagination = ({ currentPage, totalPages, onPageChange }) => {
@@ -8,14 +9,14 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
     if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
     
     if (current <= 4) {
-      return [1, 2, 3, 4, 5, '...', total];
+      return [1, 2, 3, 4, 5, 'ELLIPSIS_RIGHT', total];
     }
     
     if (current >= total - 3) {
-      return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
+      return [1, 'ELLIPSIS_LEFT', total - 4, total - 3, total - 2, total - 1, total];
     }
     
-    return [1, '...', current - 1, current, current + 1, '...', total];
+    return [1, 'ELLIPSIS_LEFT', current - 1, current, current + 1, 'ELLIPSIS_RIGHT', total];
   };
 
   const paginationRange = getPaginationRange(currentPage, totalPages);
@@ -31,20 +32,20 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
           <ChevronLeft className="w-4 h-4" />
         </button>
         
-        {paginationRange.map((pageNumber, index) => (
-          pageNumber === '...' ? (
-            <span key={`ellipsis-${index}`} className="px-1 text-slate-400">...</span>
+        {paginationRange.map((pageItem) => (
+          typeof pageItem === 'string' && pageItem.startsWith('ELLIPSIS') ? (
+            <span key={pageItem} className="px-1 text-slate-400">...</span>
           ) : (
             <button
-              key={pageNumber}
-              onClick={() => onPageChange(pageNumber)}
+              key={pageItem}
+              onClick={() => onPageChange(pageItem)}
               className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-medium transition-colors ${
-                currentPage === pageNumber
+                currentPage === pageItem
                   ? 'bg-[#1b2b4d] text-white'
                   : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              {pageNumber}
+              {pageItem}
             </button>
           )
         ))}
@@ -59,6 +60,12 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
       </div>
     </div>
   );
+};
+
+Pagination.propTypes = {
+  currentPage: PropTypes.number.isRequired,
+  totalPages: PropTypes.number.isRequired,
+  onPageChange: PropTypes.func.isRequired,
 };
 
 export default Pagination;

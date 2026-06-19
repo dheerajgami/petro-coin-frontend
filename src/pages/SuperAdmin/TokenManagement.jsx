@@ -1,16 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, Eye, ChevronLeft, ChevronRight, X, ArrowRightLeft, AlertTriangle, Flame, Box, Calendar, Copy, Check, Info, ChevronDown } from 'lucide-react';
+import { Search, Filter, Eye, X, ArrowRightLeft, AlertTriangle, Flame, Calendar, Copy, Check, Info, ChevronDown } from 'lucide-react';
 import Pagination from '../../components/Pagination';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../../api/axiosInstance';
+import { io } from 'socket.io-client';
 
-const DotsIcon = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>;
-const HexagonIcon = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><circle cx="12" cy="12" r="3"/></svg>;
+const DotsIcon = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="19" r="1.5" /></svg>;
+const HexagonIcon = ({ className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><circle cx="12" cy="12" r="3" /></svg>;
 
 const TokenManagement = () => {
   const { user } = useSelector((state) => state.auth);
 
   const [tokens, setTokens] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [activeTab, setActiveTab] = useState('tokens');
   const [stats, setStats] = useState({
     totalTokens: 0,
     activeTokens: 0,
@@ -38,6 +41,21 @@ const TokenManagement = () => {
   const [lostData, setLostData] = useState({ type: 'Lost', date: '', location: '', description: '', reportedBy: 'Admin User' });
   const [burnData, setBurnData] = useState({ quantity: '', reason: 'Fraudulent Activity', date: '', description: '' });
 
+  const handleStatusUpdate = async (status) => {
+    if (!selectedToken) return;
+    try {
+      const id = selectedToken.requestId || selectedToken.tokenId || selectedToken._id || selectedToken.id;
+      const res = await axiosInstance.put(`/admin/tokens/requests/${id}/status`, { status });
+      if (res.data?.success || res.status === 200) {
+        fetchDashboardData();
+        closeModal();
+      }
+    } catch (error) {
+      console.error(`Error updating token status to ${status}:`, error);
+      alert(`Failed to update status to ${status}`);
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -45,10 +63,21 @@ const TokenManagement = () => {
       if (searchQuery.trim()) params.search = searchQuery;
       if (filterStatus) params.status = filterStatus;
 
+      // Fetch dashboard stats & tokens
       const response = await axiosInstance.get('/admin/tokens/dashboard', { params });
       if (response.data?.success) {
         setStats(response.data.data.stats || {});
         setTokens(response.data.data.tokens || []);
+      }
+
+      // Fetch token requests
+      const reqResponse = await axiosInstance.get('/admin/tokens/requests', { params });
+      if (reqResponse.data?.success) {
+        setRequests(reqResponse.data.data || []);
+      } else if (Array.isArray(reqResponse.data)) {
+        setRequests(reqResponse.data);
+      } else if (reqResponse.data?.data) {
+        setRequests(reqResponse.data.data);
       }
     } catch (error) {
       console.error('Error fetching token dashboard:', error);
@@ -70,6 +99,21 @@ const TokenManagement = () => {
     setFilterStatus(e.target.value);
     setCurrentPage(1);
   };
+
+  useEffect(() => {
+    let socket = null;
+    if (user && user.id) {
+      socket = io('http://192.168.1.46:5000', {
+        query: { userId: user.id, role: user.role }
+      });
+      socket.on('new_notification', () => {
+        fetchDashboardData();
+      });
+    }
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, [searchQuery, filterStatus, user]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -104,12 +148,50 @@ const TokenManagement = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Pagination Logic
-  const filteredTokens = tokens.filter(t => 
-    (t.tokenId && t.tokenId.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (t.ownerName && t.ownerName.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (t.tokenUid && t.tokenUid.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Group tokens to show multiple Token UIDs in a dropdown
+  const groupedTokens = React.useMemo(() => {
+    if (!tokens || tokens.length === 0) return [];
+    const groups = {};
+    tokens.forEach(token => {
+      // Grouping key based on same owner, type, status, and dates
+      const key = `${token.ownerName}-${token.tokenCategory}-${token.status}-${token.issueDate}-${token.expiryDate}`;
+      if (!groups[key]) {
+        groups[key] = {
+          ...token,
+          tokenUids: [token.tokenUid],
+          tokenIds: [token.tokenId],
+          totalQuantity: parseFloat(token.quantity) || 0
+        };
+      } else {
+        groups[key].tokenUids.push(token.tokenUid);
+        groups[key].tokenIds.push(token.tokenId);
+        groups[key].totalQuantity += parseFloat(token.quantity) || 0;
+      }
+    });
+    return Object.values(groups).map(g => ({
+      ...g,
+      quantity: g.totalQuantity.toString(),
+    }));
+  }, [tokens]);
+
+  const activeData = activeTab === 'tokens' ? groupedTokens : requests;
+
+  const filteredTokens = activeData.filter(t => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    
+    // Check if any of the token UIDs or IDs match the query
+    const uidMatch = t.tokenUids ? t.tokenUids.some(uid => uid.toLowerCase().includes(query)) : (t.tokenUid && t.tokenUid.toLowerCase().includes(query));
+    const idMatch = t.tokenIds ? t.tokenIds.some(id => id.toLowerCase().includes(query)) : (t.tokenId && t.tokenId.toLowerCase().includes(query));
+
+    return (
+      idMatch || uidMatch ||
+      (t.requestId && t.requestId.toString().includes(query)) ||
+      (t.ownerName && t.ownerName.toLowerCase().includes(query)) ||
+      (t.businessName && t.businessName.toLowerCase().includes(query)) ||
+      (t.merchantName && t.merchantName.toLowerCase().includes(query))
+    );
+  });
 
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -118,9 +200,9 @@ const TokenManagement = () => {
 
   return (
     <div className="w-full mx-auto space-y-6 relative font-sans">
-      
+
       {/* Welcome Banner */}
-      <div 
+      <div
         className="bg-[#a2c8db] rounded-2xl relative flex items-center shadow-sm overflow-hidden w-full"
         style={{ height: '100px', padding: '1.5rem' }}
       >
@@ -141,8 +223,8 @@ const TokenManagement = () => {
           { label: 'Total Value', value: stats.totalValue ? `$${stats.totalValue.toLocaleString()}` : '$0' },
           { label: 'Issued This Month', value: stats.issuedThisMonth || 0 },
         ].map((stat, i) => (
-          <div 
-            key={i} 
+          <div
+            key={i}
             className="bg-white rounded-2xl border border-slate-200 flex justify-between items-center shadow-sm flex-1"
             style={{ padding: '1.25rem', minWidth: '180px' }}
           >
@@ -159,32 +241,53 @@ const TokenManagement = () => {
 
       {/* Main Table Section */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm pb-4">
-        
+
+        {/* Tabs */}
+        <div className="px-5 pt-4 border-b border-slate-100 flex gap-6">
+          <button
+            onClick={() => { setActiveTab('tokens'); setCurrentPage(1); }}
+            className={`pb-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'tokens' ? 'border-[#1b2b4d] text-[#1b2b4d]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          >
+            All Tokens
+          </button>
+          <button
+            onClick={() => { setActiveTab('requests'); setCurrentPage(1); }}
+            className={`pb-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'requests' ? 'border-[#1b2b4d] text-[#1b2b4d]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
+          >
+            Token Requests
+            {requests.length > 0 && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === 'requests' ? 'bg-[#1b2b4d] text-white' : 'bg-slate-100 text-slate-600'}`}>{requests.length}</span>
+            )}
+          </button>
+        </div>
+
         {/* Table Header & Controls */}
         <div className="p-5 flex flex-wrap gap-4 items-center justify-between border-b border-slate-100">
-          <h3 className="text-base font-bold text-slate-800">Token Management</h3>
-          
+          <h3 className="text-base font-bold text-slate-800">
+            {activeTab === 'tokens' ? 'Token Management' : 'Token Requests'}
+          </h3>
+
           <div className="flex items-center gap-3">
             <div className="flex items-center">
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search by ID or Owner" 
-                    className="pl-9 pr-4 py-2 border border-slate-200 rounded-l-lg focus:outline-none focus:ring-1 focus:ring-[#1b2b4d] text-sm w-64 transition-shadow"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  />
-                </div>
-              <button 
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by ID or Owner"
+                  className="pl-9 pr-4 py-2 border border-slate-200 rounded-l-lg focus:outline-none focus:ring-1 focus:ring-[#1b2b4d] text-sm w-64 transition-shadow"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
+              <button
                 onClick={handleSearch}
                 className="bg-[#1b2b4d] hover:bg-slate-800 text-white px-5 py-2 border border-[#1b2b4d] rounded-r-lg text-sm font-semibold transition-colors"
               >
                 Search
               </button>
             </div>
-            
+
             <div className="relative">
               <select
                 value={filterStatus === '' ? 'default' : filterStatus}
@@ -214,15 +317,15 @@ const TokenManagement = () => {
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-[#f8f9fa] text-slate-700 font-bold text-[13px] border-b border-slate-100">
               <tr>
-                <th className="px-6 py-4">Token ID</th>
-                <th className="px-6 py-4">Token UID</th>
+                <th className="px-6 py-4">{activeTab === 'tokens' ? 'Token ID' : 'Request ID'}</th>
+                {activeTab === 'tokens' && <th className="px-6 py-4">Token UID</th>}
                 <th className="px-6 py-4">Owner</th>
                 <th className="px-6 py-4">Type</th>
                 <th className="px-6 py-4">Quantity</th>
                 <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Issue Date</th>
-                <th className="px-6 py-4">Expiry Date</th>
-                <th className="px-6 py-4">Last Transaction</th>
+                <th className="px-6 py-4">{activeTab === 'tokens' ? 'Issue Date' : 'Request Date'}</th>
+                {activeTab === 'tokens' && <th className="px-6 py-4">Expiry Date</th>}
+                {activeTab === 'tokens' && <th className="px-6 py-4">Last Transaction</th>}
                 <th className="px-6 py-4 text-center">Actions</th>
               </tr>
             </thead>
@@ -232,64 +335,88 @@ const TokenManagement = () => {
               ) : currentTokens.length === 0 ? (
                 <tr><td colSpan="10" className="px-6 py-4 text-center text-slate-500">No tokens found</td></tr>
               ) : (
-                currentTokens.map((item) => (
-                  <tr key={item.tokenId} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium relative text-[13px]">
-                    <td className="px-6 py-4 font-bold text-slate-600">{item.tokenId}</td>
-                    <td className="px-6 py-4 text-slate-500">{item.tokenUid}</td>
-                    <td className="px-6 py-4 text-slate-600">{item.ownerName}</td>
-                    
+                currentTokens.map((item) => {
+                  const itemId = item.tokenId || item.requestId || item.id;
+                  return (
+                  <tr key={itemId} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium relative text-[13px]">
+                    <td className="px-6 py-4 font-bold text-slate-600">{activeTab === 'requests' ? `REQ-${item.requestId || item.id}` : item.tokenId}</td>
+                    {activeTab === 'tokens' && (
+                      <td className="px-6 py-4 text-slate-500">
+                        {item.tokenUids && item.tokenUids.length > 1 ? (
+                          <select className="p-1.5 border border-slate-200 rounded-lg text-xs outline-none bg-white cursor-pointer hover:border-slate-300 focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] transition-all max-w-[200px]">
+                            {item.tokenUids.map(uid => <option key={uid} value={uid}>{uid}</option>)}
+                          </select>
+                        ) : (
+                          item.tokenUid
+                        )}
+                      </td>
+                    )}
+                    <td className="px-6 py-4 text-slate-600">{item.ownerName || item.businessName || item.merchantName}</td>
+
                     <td className="px-6 py-4">
-                      <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-bold ${
-                        item.ownerType === 'Customer' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                      }`}>
-                        {item.ownerType || 'Unknown'}
+                      <div className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-[11px] font-bold ${item.ownerType === 'Customer' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                        }`}>
+                        {item.ownerType || 'Merchant'}
                       </div>
                     </td>
-                    
+
                     <td className="px-6 py-4 text-slate-600">{item.quantity}</td>
-                    
+
                     <td className="px-6 py-4">
-                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold ${
-                        item.status === 'Available' || item.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
-                      }`}>
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold ${item.status === 'Available' || item.status === 'Active' || item.status === 'Pending' || item.status === 'pending' ? 'bg-green-50 text-green-600' : 'bg-yellow-50 text-yellow-600'
+                        }`}>
                         {item.status}
                       </div>
                     </td>
-                    
-                    <td className="px-6 py-4 text-slate-500">{item.issueDate}</td>
-                    <td className="px-6 py-4 text-slate-500">{item.expiryDate}</td>
-                    <td className="px-6 py-4 text-slate-500">{item.lastTransaction || 'N/A'}</td>
-                    
+
+                    <td className="px-6 py-4 text-slate-500">{item.issueDate || item.requestDate || item.created_at || 'N/A'}</td>
+                    {activeTab === 'tokens' && <td className="px-6 py-4 text-slate-500">{item.expiryDate}</td>}
+                    {activeTab === 'tokens' && <td className="px-6 py-4 text-slate-500">{item.lastTransaction || 'N/A'}</td>}
+
                     <td className="px-6 py-4 text-center relative">
-                      <button 
-                        onClick={() => toggleDropdown(item.tokenId)}
+                      <button
+                        onClick={() => toggleDropdown(itemId)}
                         className="p-2 rounded-full hover:bg-slate-200 transition-colors text-slate-800"
                       >
                         <DotsIcon className="w-5 h-5" />
                       </button>
 
-                      {activeDropdown === item.tokenId && (
-                        <div 
+                      {activeDropdown === itemId && (
+                        <div
                           ref={dropdownRef}
                           className="absolute bg-white rounded-xl shadow-[0_4px_24px_-4px_rgba(0,0,0,0.15)] border border-slate-100 z-50 py-2 right-12 top-2 w-48 text-left"
                         >
-                          <button onClick={() => openModal('details', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
-                            <Eye className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> View details
-                          </button>
-                          <button onClick={() => openModal('transfer', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
-                            <ArrowRightLeft className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Transfer Token
-                          </button>
-                          <button onClick={() => openModal('lost', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
-                            <AlertTriangle className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Mark lost/Stolen
-                          </button>
-                          <button onClick={() => openModal('burn', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
-                            <Flame className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Burn
-                          </button>
+                          {activeTab === 'requests' ? (
+                            <>
+                              <button onClick={() => openModal('approve', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <Check className="w-4 h-4 text-emerald-500" strokeWidth={2.5} /> Approve
+                              </button>
+                              <button onClick={() => openModal('reject', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <X className="w-4 h-4 text-red-500" strokeWidth={2.5} /> Reject
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => openModal('details', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <Eye className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> View details
+                              </button>
+                              <button onClick={() => openModal('transfer', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <ArrowRightLeft className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Transfer Token
+                              </button>
+                              <button onClick={() => openModal('lost', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <AlertTriangle className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Mark lost/Stolen
+                              </button>
+                              <button onClick={() => openModal('burn', item)} className="w-full text-left px-5 py-2.5 text-sm font-bold text-[#1b2b4d]/80 hover:bg-slate-50 flex items-center gap-3">
+                                <Flame className="w-4 h-4 text-slate-500" strokeWidth={2.5} /> Burn
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </td>
                   </tr>
-                ))
+                );
+              })
               )}
             </tbody>
           </table>
@@ -298,10 +425,10 @@ const TokenManagement = () => {
         {/* Pagination */}
         {totalPages > 0 && (
           <div className="border-t border-slate-100">
-            <Pagination 
-              currentPage={currentPage} 
-              totalPages={totalPages} 
-              onPageChange={setCurrentPage} 
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
             />
           </div>
         )}
@@ -320,7 +447,7 @@ const TokenManagement = () => {
                 Token Details
               </h3>
             </div>
-            
+
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div className="grid grid-cols-2 gap-6">
                 <div>
@@ -338,9 +465,8 @@ const TokenManagement = () => {
                 <div>
                   <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Owner Type</label>
                   <div className="w-full p-2.5 border border-slate-300 rounded-lg bg-white flex items-center">
-                    <span className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full text-[11px] font-bold ${
-                      selectedToken.ownerType === 'Customer' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
-                    }`}>{selectedToken.ownerType}</span>
+                    <span className={`inline-flex items-center justify-center px-3 py-0.5 rounded-full text-[11px] font-bold ${selectedToken.ownerType === 'Customer' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                      }`}>{selectedToken.ownerType}</span>
                   </div>
                 </div>
               </div>
@@ -414,13 +540,13 @@ const TokenManagement = () => {
                 Transfer Token
               </h3>
             </div>
-            
+
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div>
                 <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Token ID</label>
                 <input type="text" readOnly value={selectedToken.tokenId} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:outline-none" />
               </div>
-              
+
               <div>
                 <h4 className="text-sm font-bold text-[#1b2b4d] mb-1">Transfer Information</h4>
                 <p className="text-xs text-slate-500 mb-3">Once transferred, the recipient will receive full ownership of the tokens. This action cannot be undone.</p>
@@ -436,16 +562,16 @@ const TokenManagement = () => {
                 <div className="grid grid-cols-2 gap-6 mb-4">
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Recipient Email</label>
-                    <input type="email" placeholder="Search recipient email" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.email} onChange={e => setTransferData({...transferData, email: e.target.value})} />
+                    <input type="email" placeholder="Search recipient email" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.email} onChange={e => setTransferData({ ...transferData, email: e.target.value })} />
                   </div>
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Quantity to Transfer</label>
-                    <input type="number" placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.quantity} onChange={e => setTransferData({...transferData, quantity: e.target.value})} />
+                    <input type="number" placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.quantity} onChange={e => setTransferData({ ...transferData, quantity: e.target.value })} />
                   </div>
                 </div>
                 <div>
                   <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Notes (Optional)</label>
-                  <textarea rows="3" placeholder="type note" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.notes} onChange={e => setTransferData({...transferData, notes: e.target.value})}></textarea>
+                  <textarea rows="3" placeholder="type note" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={transferData.notes} onChange={e => setTransferData({ ...transferData, notes: e.target.value })}></textarea>
                 </div>
               </div>
 
@@ -495,13 +621,13 @@ const TokenManagement = () => {
                 Mark Lost/Stolen
               </h3>
             </div>
-            
+
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div>
                 <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Token ID</label>
                 <input type="text" readOnly value={selectedToken.tokenId} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:outline-none" />
               </div>
-              
+
               <div>
                 <h4 className="text-sm font-bold text-[#1b2b4d] mb-1">Important Notice</h4>
                 <p className="text-[13px] text-slate-600 leading-tight">Marking this token as lost or stolen will immediately deactivate it. The token holder will be notified, and this action will be logged for audit purposes.</p>
@@ -518,9 +644,9 @@ const TokenManagement = () => {
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-1 ${lostData.type === 'Lost' ? 'border-[#1b2b4d]' : 'border-slate-300'}`}>
                       {lostData.type === 'Lost' && <div className="w-2 h-2 rounded-full bg-[#1b2b4d]"></div>}
                     </div>
-                    <input type="radio" className="hidden" name="incidentType" value="Lost" checked={lostData.type === 'Lost'} onChange={(e) => setLostData({...lostData, type: e.target.value})} />
+                    <input type="radio" className="hidden" name="incidentType" value="Lost" checked={lostData.type === 'Lost'} onChange={(e) => setLostData({ ...lostData, type: e.target.value })} />
                   </label>
-                  
+
                   <label className={`border rounded-lg p-3 cursor-pointer flex justify-between items-start transition-colors ${lostData.type === 'Stolen' ? 'border-[#1b2b4d] bg-slate-50' : 'border-slate-300 hover:bg-slate-50'}`}>
                     <div>
                       <div className="font-semibold text-[#1b2b4d] text-sm">Stolen</div>
@@ -529,7 +655,7 @@ const TokenManagement = () => {
                     <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-1 ${lostData.type === 'Stolen' ? 'border-[#1b2b4d]' : 'border-slate-300'}`}>
                       {lostData.type === 'Stolen' && <div className="w-2 h-2 rounded-full bg-[#1b2b4d]"></div>}
                     </div>
-                    <input type="radio" className="hidden" name="incidentType" value="Stolen" checked={lostData.type === 'Stolen'} onChange={(e) => setLostData({...lostData, type: e.target.value})} />
+                    <input type="radio" className="hidden" name="incidentType" value="Stolen" checked={lostData.type === 'Stolen'} onChange={(e) => setLostData({ ...lostData, type: e.target.value })} />
                   </label>
                 </div>
               </div>
@@ -540,17 +666,17 @@ const TokenManagement = () => {
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Date Reported</label>
                     <div className="relative">
-                      <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.date} onChange={e => setLostData({...lostData, date: e.target.value})} />
+                      <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.date} onChange={e => setLostData({ ...lostData, date: e.target.value })} />
                       <Calendar className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Location Where {lostData.type}</label>
-                    <input type="text" placeholder="e.g. central Bus Station" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.location} onChange={e => setLostData({...lostData, location: e.target.value})} />
+                    <input type="text" placeholder="e.g. central Bus Station" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.location} onChange={e => setLostData({ ...lostData, location: e.target.value })} />
                   </div>
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Detailed Description</label>
-                    <textarea rows="2" placeholder="Describe the circumstances of the incident" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.description} onChange={e => setLostData({...lostData, description: e.target.value})}></textarea>
+                    <textarea rows="2" placeholder="Describe the circumstances of the incident" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={lostData.description} onChange={e => setLostData({ ...lostData, description: e.target.value })}></textarea>
                   </div>
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Reported By</label>
@@ -582,13 +708,13 @@ const TokenManagement = () => {
                 Burn Token
               </h3>
             </div>
-            
+
             <div className="p-6 space-y-6 overflow-y-auto flex-1">
               <div>
                 <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Token ID</label>
                 <input type="text" readOnly value={selectedToken.tokenId} className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:outline-none" />
               </div>
-              
+
               <div>
                 <h4 className="text-sm font-bold text-[#1b2b4d] mb-1">Critical Action - No Undo</h4>
                 <p className="text-[13px] text-slate-600 leading-tight">Burning tokens will permanently destroy them. This action is irreversible. Proceed only if you are absolutely certain.</p>
@@ -615,9 +741,9 @@ const TokenManagement = () => {
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Quantity to Burn</label>
-                    <input type="number" placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.quantity} onChange={e => setBurnData({...burnData, quantity: e.target.value})} />
+                    <input type="number" placeholder="0" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.quantity} onChange={e => setBurnData({ ...burnData, quantity: e.target.value })} />
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Reason for Burning</label>
                     <div className="grid grid-cols-2 gap-3">
@@ -627,7 +753,7 @@ const TokenManagement = () => {
                           <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${burnData.reason === reason ? 'border-[#1b2b4d]' : 'border-slate-300'}`}>
                             {burnData.reason === reason && <div className="w-2 h-2 rounded-full bg-[#1b2b4d]"></div>}
                           </div>
-                          <input type="radio" className="hidden" name="burnReason" value={reason} checked={burnData.reason === reason} onChange={(e) => setBurnData({...burnData, reason: e.target.value})} />
+                          <input type="radio" className="hidden" name="burnReason" value={reason} checked={burnData.reason === reason} onChange={(e) => setBurnData({ ...burnData, reason: e.target.value })} />
                         </label>
                       ))}
                     </div>
@@ -636,13 +762,13 @@ const TokenManagement = () => {
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Burn Date</label>
                     <div className="relative">
-                      <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.date} onChange={e => setBurnData({...burnData, date: e.target.value})} />
+                      <input type="date" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.date} onChange={e => setBurnData({ ...burnData, date: e.target.value })} />
                       <Calendar className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
                   <div>
                     <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Detailed Description</label>
-                    <textarea rows="2" placeholder="Describe the circumstances of the incident" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.description} onChange={e => setBurnData({...burnData, description: e.target.value})}></textarea>
+                    <textarea rows="2" placeholder="Describe the circumstances of the incident" className="w-full p-2.5 border border-slate-300 rounded-lg bg-white text-slate-700 text-sm focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] outline-none transition-all" value={burnData.description} onChange={e => setBurnData({ ...burnData, description: e.target.value })}></textarea>
                   </div>
                 </div>
               </div>
@@ -654,6 +780,56 @@ const TokenManagement = () => {
               </button>
               <button onClick={closeModal} className="px-5 py-2 rounded-lg text-white text-sm font-bold flex items-center gap-2 hover:opacity-90 transition-opacity" style={{ backgroundColor: '#ef4444' }}>
                 Proceed to Confirm <Flame className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Approve Token Modal */}
+      {modalType === 'approve' && selectedToken && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl flex flex-col relative border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
+              <h3 className="text-lg font-bold text-[#1b2b4d] flex items-center gap-3">
+                <X className="w-5 h-5 text-slate-400 cursor-pointer hover:text-slate-700 transition-colors" onClick={closeModal} />
+                Approve Token
+              </h3>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-slate-600">Are you sure you want to approve this token request for <strong className="text-[#1b2b4d]">{selectedToken.ownerName}</strong>?</p>
+            </div>
+            <div className="p-5 border-t border-slate-200 flex justify-end gap-3 bg-white">
+              <button onClick={closeModal} className="px-5 py-2 rounded-lg border border-slate-300 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => handleStatusUpdate('approved')} className="px-5 py-2 rounded-lg bg-emerald-500 text-white text-sm font-bold flex items-center gap-2 hover:bg-emerald-600 transition-colors">
+                Approve <Check className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Reject Token Modal */}
+      {modalType === 'reject' && selectedToken && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl flex flex-col relative border border-slate-200 overflow-hidden">
+            <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
+              <h3 className="text-lg font-bold text-[#1b2b4d] flex items-center gap-3">
+                <X className="w-5 h-5 text-slate-400 cursor-pointer hover:text-slate-700 transition-colors" onClick={closeModal} />
+                Reject Token
+              </h3>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-slate-600">Are you sure you want to reject this token request for <strong className="text-[#1b2b4d]">{selectedToken.ownerName}</strong>?</p>
+            </div>
+            <div className="p-5 border-t border-slate-200 flex justify-end gap-3 bg-white">
+              <button onClick={closeModal} className="px-5 py-2 rounded-lg border border-slate-300 text-sm font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button onClick={() => handleStatusUpdate('rejected')} className="px-5 py-2 rounded-lg bg-red-500 text-white text-sm font-bold flex items-center gap-2 hover:bg-red-600 transition-colors">
+                Reject <X className="w-4 h-4" />
               </button>
             </div>
           </div>

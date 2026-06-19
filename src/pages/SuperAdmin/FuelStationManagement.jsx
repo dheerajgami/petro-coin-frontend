@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, UserCog, Trash2, Fuel, Truck, Droplet, CircleDollarSign, ChevronLeft, ChevronRight, X, ChevronDown } from 'lucide-react';
+import { Search, Filter, Eye, UserCog, Trash2, Fuel, Truck, Droplet, CircleDollarSign, X, ChevronDown } from 'lucide-react';
 import Pagination from '../../components/Pagination';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../../api/axiosInstance';
@@ -46,7 +46,7 @@ const FuelStationManagement = () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get('/fuel/management');
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         setData({
           dashboard: response.data.data.dashboard || null,
           stations: response.data.data.fuelStations || []
@@ -152,13 +152,31 @@ const FuelStationManagement = () => {
 
       const response = await axiosInstance.put(`/fuel/management/${selectedStation.stationId}`, payload);
       
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         closeDrawer();
         fetchStations(); // Refresh list
       }
     } catch (error) {
       console.error("Failed to update fuel station", error);
       alert("Failed to update fuel station.");
+    }
+  };
+
+  const handleDeleteStation = async (stationId) => {
+    if (!window.confirm("Are you sure you want to delete this fuel station? This will remove all operator user associations and station configurations.")) {
+      return;
+    }
+    try {
+      const response = await axiosInstance.delete(`/admin/fuel-stations/${stationId}`);
+      if (response.data?.success) {
+        alert("Fuel station deleted successfully.");
+        fetchStations();
+      } else {
+        alert(response.data?.message || "Failed to delete fuel station.");
+      }
+    } catch (error) {
+      console.error("Failed to delete fuel station", error);
+      alert(error.response?.data?.message || "Failed to delete fuel station.");
     }
   };
 
@@ -197,8 +215,8 @@ const FuelStationManagement = () => {
           { label: 'Total Capacity', value: `${(data.dashboard?.totalCapacity || 0).toLocaleString()} L`, icon: Truck },
           { label: 'Fuel Available', value: `${(data.dashboard?.fuelAvailable || 0).toLocaleString()} L`, icon: Droplet },
           { label: 'Total Revenue', value: `$${(data.dashboard?.totalRevenue || 0).toLocaleString()}`, icon: CircleDollarSign },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
+        ].map((stat) => (
+          <div key={stat.label} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <h3 className="text-base font-semibold text-slate-800 mb-1">{stat.label}</h3>
               <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
@@ -280,8 +298,8 @@ const FuelStationManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {currentStations.length > 0 ? currentStations.map((item, index) => (
-                <tr key={index} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium">
+              {currentStations.length > 0 ? currentStations.map((item) => (
+                <tr key={item.stationId} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium">
                   <td className="px-6 py-5">{item.stationName}</td>
                   <td className="px-6 py-5">{item.location || 'N/A'}</td>
                   <td className="px-6 py-5">{item.fuelAvailable}</td>
@@ -313,6 +331,7 @@ const FuelStationManagement = () => {
                         <UserCog className="w-3.5 h-3.5" />
                       </button>
                       <button 
+                        onClick={() => handleDeleteStation(item.id || item.stationId)}
                         className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center text-white hover:bg-red-600 transition-colors" 
                         title="Delete"
                       >
@@ -346,9 +365,11 @@ const FuelStationManagement = () => {
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Backdrop */}
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
           <div 
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={closeDrawer}
+            aria-hidden="true"
           ></div>
           
           {/* Drawer Panel */}
@@ -374,19 +395,19 @@ const FuelStationManagement = () => {
                 <>
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Fuel Available</label>
-                      <input type="text" readOnly value={selectedStation?.fuelAvailable || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                      <label htmlFor="view-fuel" className="block text-sm font-semibold text-slate-800 mb-2">Fuel Available</label>
+                      <input id="view-fuel" type="text" readOnly value={selectedStation?.fuelAvailable || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Capacity Fuel</label>
-                      <input type="text" readOnly value={selectedStation?.fuelCapacity ? `${selectedStation.fuelCapacity} L` : ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                      <label htmlFor="view-capacity" className="block text-sm font-semibold text-slate-800 mb-2">Capacity Fuel</label>
+                      <input id="view-capacity" type="text" readOnly value={selectedStation?.fuelCapacity ? `${selectedStation.fuelCapacity} L` : ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
-                      <input type="text" readOnly value={selectedStation?.operatingHours || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                      <label htmlFor="view-hours" className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
+                      <input id="view-hours" type="text" readOnly value={selectedStation?.operatingHours || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Station Status</label>
+                      <p className="block text-sm font-semibold text-slate-800 mb-2">Station Status</p>
                       <div className="w-full border border-slate-300 rounded-lg px-4 py-2.5 bg-slate-50 flex items-center">
                         <span className={`px-3 py-1 rounded-md text-xs font-semibold capitalize ${
                           selectedStation?.status?.toLowerCase() === 'active' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-600'
@@ -419,71 +440,71 @@ const FuelStationManagement = () => {
                 <>
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Station Name</label>
-                      <input type="text" name="stationName" value={selectedStation?.stationName || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-stationName" className="block text-sm font-semibold text-slate-800 mb-2">Station Name</label>
+                      <input id="edit-stationName" type="text" name="stationName" value={selectedStation?.stationName || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Station Status</label>
-                      <select name="status" value={selectedStation?.status || 'active'} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1b2b4d] bg-white text-slate-700 capitalize">
+                      <label htmlFor="edit-status" className="block text-sm font-semibold text-slate-800 mb-2">Station Status</label>
+                      <select id="edit-status" name="status" value={selectedStation?.status || 'active'} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1b2b4d] bg-white text-slate-700 capitalize">
                         <option value="active">Active</option>
                         <option value="inactive">Inactive</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Street Address</label>
-                      <input type="text" name="streetAddress" value={selectedStation?.streetAddress || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-streetAddress" className="block text-sm font-semibold text-slate-800 mb-2">Street Address</label>
+                      <input id="edit-streetAddress" type="text" name="streetAddress" value={selectedStation?.streetAddress || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
-                      <input type="text" name="operatingHours" value={selectedStation?.operatingHours || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-operatingHours" className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
+                      <input id="edit-operatingHours" type="text" name="operatingHours" value={selectedStation?.operatingHours || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">City</label>
-                      <input type="text" name="city" value={selectedStation?.city || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-city" className="block text-sm font-semibold text-slate-800 mb-2">City</label>
+                      <input id="edit-city" type="text" name="city" value={selectedStation?.city || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">State</label>
-                      <input type="text" name="state" value={selectedStation?.state || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-state" className="block text-sm font-semibold text-slate-800 mb-2">State</label>
+                      <input id="edit-state" type="text" name="state" value={selectedStation?.state || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
-                      <input type="text" name="operatingHours" value={selectedStation?.operatingHours || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Phone Number</label>
-                      <input type="text" name="phoneNumber" value={selectedStation?.phoneNumber || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Email Address</label>
-                      <input type="text" name="email" value={selectedStation?.email || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-operatingHours2" className="block text-sm font-semibold text-slate-800 mb-2">Operating Hours</label>
+                      <input id="edit-operatingHours2" type="text" name="operatingHours" value={selectedStation?.operatingHours || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Fuel Capacity (Liters)</label>
-                      <input type="number" name="fuelCapacity" value={selectedStation?.fuelCapacity || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-phoneNumber" className="block text-sm font-semibold text-slate-800 mb-2">Phone Number</label>
+                      <input id="edit-phoneNumber" type="text" name="phoneNumber" value={selectedStation?.phoneNumber || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Current Fuel (Liters)</label>
-                      <input type="number" name="current_fuel" value={selectedStation?.current_fuel || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-email" className="block text-sm font-semibold text-slate-800 mb-2">Email Address</label>
+                      <input id="edit-email" type="text" name="email" value={selectedStation?.email || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Number of Pumps</label>
-                      <input type="number" name="number_of_pumps" value={selectedStation?.number_of_pumps || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-fuelCapacity" className="block text-sm font-semibold text-slate-800 mb-2">Fuel Capacity (Liters)</label>
+                      <input id="edit-fuelCapacity" type="number" name="fuelCapacity" value={selectedStation?.fuelCapacity || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-800 mb-2">Staff Members</label>
-                      <input type="number" name="staff_members" value={selectedStation?.staff_members || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                      <label htmlFor="edit-current_fuel" className="block text-sm font-semibold text-slate-800 mb-2">Current Fuel (Liters)</label>
+                      <input id="edit-current_fuel" type="number" name="current_fuel" value={selectedStation?.current_fuel || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="edit-number_of_pumps" className="block text-sm font-semibold text-slate-800 mb-2">Number of Pumps</label>
+                      <input id="edit-number_of_pumps" type="number" name="number_of_pumps" value={selectedStation?.number_of_pumps || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
+                    </div>
+                    <div>
+                      <label htmlFor="edit-staff_members" className="block text-sm font-semibold text-slate-800 mb-2">Staff Members</label>
+                      <input id="edit-staff_members" type="number" name="staff_members" value={selectedStation?.staff_members || ''} onChange={handleInputChange} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1b2b4d]" />
                     </div>
                   </div>
                 </>

@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, ChevronLeft, ChevronRight, AlertTriangle, ArrowLeft, Copy, ShieldAlert, MoreVertical, ArrowRight, ChevronDown } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Filter, Eye, AlertTriangle, ArrowLeft, Copy, Check, ShieldAlert, MoreVertical, ArrowRight, ChevronDown, X } from 'lucide-react';
+import { useSelector } from 'react-redux';
 import Pagination from '../../components/Pagination';
 import axiosInstance from '../../api/axiosInstance';
 
 const TransactionsManagement = () => {
+  const navigate = useNavigate();
+  const { user } = useSelector((state) => state.auth);
   const [currentView, setCurrentView] = useState('list'); // 'list', 'details', 'report'
   const [selectedTxn, setSelectedTxn] = useState(null);
 
@@ -11,6 +15,8 @@ const TransactionsManagement = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [profileModal, setProfileModal] = useState({ isOpen: false, loading: false, data: null });
 
   const [reportData, setReportData] = useState({
     reason: '',
@@ -145,29 +151,202 @@ const TransactionsManagement = () => {
     }
   };
 
+
+
+
+
   const getStatusStyle = (status) => {
     switch (status) {
-      case 'Active': return 'bg-green-100 text-green-700';
-      case 'Failed': return 'bg-red-100 text-red-700';
+      case 'SUCCESS': return 'bg-green-100 text-green-700';
+      case 'FAILED': return 'bg-red-100 text-red-700';
       default: return 'bg-slate-100 text-slate-700';
     }
   };
 
-  const getTypeStyle = (type) => {
-    switch (type) {
-      case 'Redemption': return 'bg-green-100 text-green-700';
-      case 'Transfer': return 'bg-indigo-100 text-indigo-700';
-      default: return 'bg-slate-100 text-slate-700';
+  const handleCopyHash = () => {
+    if (selectedTxn?.txHash) {
+      navigator.clipboard.writeText(selectedTxn.txHash);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleViewProfile = async (id, fallbackName) => {
+    if (!id || id === '-') return;
+    if (id === 'ADMIN-0001' || id.toUpperCase().startsWith('ADMIN') || fallbackName === 'Super Admin') {
+      setProfileModal({
+        isOpen: true,
+        loading: false,
+        data: {
+          id: id || 'ADMIN-0001',
+          name: user?.name || fallbackName || 'Super Admin',
+          role: 'Super Admin',
+          tokens: 'Unlimited',
+          email: user?.email || 'admin@gmail.com',
+          status: 'Active'
+        }
+      });
+      return;
+    }
+
+    setProfileModal({ isOpen: true, loading: true, data: null });
+    try {
+      if (id.startsWith('CUST-') || id.startsWith('CUS')) {
+        const res = await axiosInstance.get(`/admin/customer/${id}`);
+        if (res.data?.success) {
+          const customer = res.data.data;
+          setProfileModal({
+            isOpen: true,
+            loading: false,
+            data: {
+              id: customer.customerId,
+              name: customer.customerName,
+              role: 'Customer',
+              tokens: customer.tokenInformation?.currentTokenBalance || '0',
+              email: customer.email || 'N/A',
+              status: customer.status || 'Active'
+            }
+          });
+        }
+      } else if (id.startsWith('MRCH-') || id.startsWith('MER')) {
+        const res = await axiosInstance.get(`/admin/merchant/${id}`);
+        if (res.data?.success) {
+          const merchant = res.data.data;
+          setProfileModal({
+            isOpen: true,
+            loading: false,
+            data: {
+              id: merchant.merchantId,
+              name: merchant.businessName || merchant.applicantName,
+              role: 'Merchant',
+              tokens: merchant.tokenInformation?.currentTokenBalance || '0',
+              email: merchant.contactInformation?.email || 'N/A',
+              status: merchant.status || 'Active'
+            }
+          });
+        }
+      } else if (id.startsWith('STN')) {
+        const res = await axiosInstance.get(`/admin/managed-outlets/${id}`);
+        if (res.data?.success) {
+          const station = res.data.data;
+          setProfileModal({
+            isOpen: true,
+            loading: false,
+            data: {
+              id: station.stationId,
+              name: station.stationName,
+              role: 'Fuel Station',
+              tokens: 'N/A',
+              fuelLiters: `${station.fuelAvailable} Liters`,
+              email: station.email || 'N/A',
+              status: station.stationStatus || 'Active'
+            }
+          });
+        }
+      } else {
+        setProfileModal({
+          isOpen: true,
+          loading: false,
+          data: {
+            id: id,
+            name: fallbackName || 'System Entity',
+            role: 'System',
+            tokens: 'N/A',
+            email: 'N/A',
+            status: 'Active'
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching profile details:", err);
+      setProfileModal({
+        isOpen: true,
+        loading: false,
+        data: {
+          id: id,
+          name: fallbackName || 'N/A',
+          role: id.startsWith('CUST-') ? 'Customer' : id.startsWith('MRCH-') ? 'Merchant' : id.startsWith('STN') ? 'Fuel Station' : 'Unknown',
+          tokens: 'Error loading',
+          email: 'N/A',
+          status: 'Active'
+        }
+      });
+    }
+  };
+
+  const getTimeAgo = (dateStr) => {
+    if (!dateStr) return '-';
+    const diff = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    const days = Math.floor(diff / 86400);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
   };
 
   // --- Views ---
+
+  const renderTableBody = (currentTransactions) => {
+    if (loading) {
+      return [
+        <tr key="loading"><td colSpan="9" className="text-center py-10 text-slate-500">Loading transactions...</td></tr>
+      ];
+    }
+    if (currentTransactions.length === 0) {
+      return [
+        <tr key="empty"><td colSpan="9" className="text-center py-10 text-slate-500">No transactions found</td></tr>
+      ];
+    }
+    return currentTransactions.map((txn, index) => (
+      <tr key={txn.id || index} className="hover:bg-slate-50 transition-colors">
+        <td className="px-6 py-4 font-medium text-[#1b2b4d]">{txn.txnId}</td>
+        <td className="px-6 py-4 text-slate-600">{new Date(txn.createdAt).toLocaleString()}</td>
+        <td className="px-6 py-4">{txn.customerName || (txn.type?.toUpperCase() === 'MINT' ? 'Super Admin' : 'System')}</td>
+        <td className="px-6 py-4">{txn.stationName || txn.outlet || 'N/A'}</td>
+        <td className="px-6 py-4">
+          <div className="flex items-center">
+            <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${txn.type?.toUpperCase() === 'REDEMPTION' || txn.type?.toUpperCase() === 'BURN' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
+              {txn.type?.toUpperCase() === 'REDEMPTION' || txn.type?.toUpperCase() === 'BURN' ? <span className="text-green-600">✓</span> : <ArrowRight className="w-3 h-3 -rotate-45" />}
+              {txn.type?.toUpperCase()}
+            </span>
+          </div>
+        </td>
+        <td className="px-6 py-4 font-semibold">{txn.amount}</td>
+        <td className="px-6 py-4">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusStyle(txn.status)}`}>
+            {txn.status}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-slate-500 text-sm">{txn.timeAgo || getTimeAgo(txn.createdAt)}</td>
+        <td className="px-6 py-4 text-center relative">
+          <button
+            onClick={() => setActiveDropdown(activeDropdown === (txn.id || txn.txnId || index) ? null : (txn.id || txn.txnId || index))}
+            className="p-1.5 rounded hover:bg-slate-200 text-slate-600 transition-colors"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          {activeDropdown === (txn.id || txn.txnId || index) && (
+            <div className="absolute right-10 top-8 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-[999] py-1 text-left">
+              <button onClick={() => handleAction('details', txn)} className="w-full text-left px-4 py-2.5 text-sm text-[#1b2b4d] hover:bg-slate-50 flex items-center gap-3 font-semibold transition-colors">
+                {detailLoading ? <span className="animate-spin text-slate-400 border-2 border-slate-400 border-t-transparent rounded-full w-4 h-4" /> : <Eye className="w-4 h-4 text-slate-400" />} View details
+              </button>
+              <button onClick={() => handleAction('report', txn)} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 font-semibold transition-colors">
+                <AlertTriangle className="w-4 h-4 text-red-500" /> Report Suspicious
+              </button>
+            </div>
+          )}
+        </td>
+      </tr>
+    ));
+  };
 
   const renderListView = () => {
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentTransactions = transactions.slice(indexOfFirstItem, indexOfLastItem);
     const totalPages = Math.ceil(transactions.length / itemsPerPage);
+
+
 
     return (
       <div className="w-full mx-auto space-y-6 relative font-sans">
@@ -179,8 +358,8 @@ const TransactionsManagement = () => {
               { label: 'Total Revenue', value: stats.totalRevenue, icon: '💰' },
               { label: 'Total Tokens Burned', value: stats.totalTokensBurned, icon: '🔥' },
               { label: 'Total Fuel Balance', value: stats.totalFuelBalance, icon: '⛽' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 flex flex-1 min-w-[200px] justify-between items-center shadow-sm">
+            ].map((stat) => (
+              <div key={stat.label} className="bg-white rounded-xl p-5 border border-slate-200 flex flex-1 min-w-[200px] justify-between items-center shadow-sm">
                 <div>
                   <div className="text-sm font-semibold text-[#1b2b4d] mb-2">{stat.label}</div>
                   <div className="text-2xl font-bold text-[#1b2b4d]">{stat.value}</div>
@@ -256,53 +435,7 @@ const TransactionsManagement = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr><td colSpan="9" className="text-center py-10 text-slate-500">Loading transactions...</td></tr>
-                ) : currentTransactions.length === 0 ? (
-                  <tr><td colSpan="9" className="text-center py-10 text-slate-500">No transactions found</td></tr>
-                ) : (
-                  currentTransactions.map((txn, index) => (
-                    <tr key={txn.id || index} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 font-medium text-[#1b2b4d]">{txn.txnId}</td>
-                      <td className="px-6 py-4 text-slate-600">{new Date(txn.createdAt).toLocaleString()}</td>
-                      <td className="px-6 py-4">{txn.customerName || 'N/A'}</td>
-                      <td className="px-6 py-4">{txn.stationName || txn.outlet || 'N/A'}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${txn.type === 'Redemption' || txn.type === 'Burn' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                            {txn.type === 'Redemption' || txn.type === 'Burn' ? <span className="text-green-600">✓</span> : <ArrowRight className="w-3 h-3 -rotate-45" />}
-                            {txn.type}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 font-semibold">{txn.amount}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${txn.status === 'SUCCESS' ? 'bg-green-100 text-green-700' : txn.status === 'FAILED' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
-                          {txn.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-slate-500 text-sm">{txn.timeAgo || '-'}</td>
-                      <td className="px-6 py-4 text-center relative">
-                        <button
-                          onClick={() => setActiveDropdown(activeDropdown === txn.id ? null : txn.id)}
-                          className="p-1.5 rounded hover:bg-slate-200 text-slate-600 transition-colors"
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {activeDropdown === txn.id && (
-                          <div className="absolute right-10 top-8 w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-[999] py-1 text-left">
-                            <button onClick={() => handleAction('details', txn)} className="w-full text-left px-4 py-2.5 text-sm text-[#1b2b4d] hover:bg-slate-50 flex items-center gap-3 font-semibold transition-colors">
-                              {detailLoading ? <span className="animate-spin text-slate-400 border-2 border-slate-400 border-t-transparent rounded-full w-4 h-4" /> : <Eye className="w-4 h-4 text-slate-400" />} View details
-                            </button>
-                            <button onClick={() => handleAction('report', txn)} className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 font-semibold transition-colors">
-                              <AlertTriangle className="w-4 h-4 text-red-500" /> Report Suspicious
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                {renderTableBody(currentTransactions)}
               </tbody>
             </table>
           </div>
@@ -351,15 +484,45 @@ const TransactionsManagement = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="text-slate-500 text-sm mb-4">From (Sender)</div>
-              <div className="font-semibold text-[#1b2b4d] text-base truncate">{selectedTxn?.senderName || 'N/A'}</div>
-              <div className="text-slate-500 text-xs mt-1">{selectedTxn?.senderId || '-'}</div>
-              <button className="text-blue-600 text-sm font-medium mt-4 hover:underline flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3 -rotate-45" /></button>
+              <div className="flex items-center gap-4">
+                {selectedTxn?.senderProfile ? (
+                  <img src={selectedTxn.senderProfile.startsWith('http') ? selectedTxn.senderProfile : `${axiosInstance.defaults.baseURL?.replace('/api', '') || 'http://192.168.1.46:5000'}/${selectedTxn.senderProfile.replace(/^\//, '')}`} alt="Sender" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200">
+                    {selectedTxn?.senderName?.charAt(0) || 'S'}
+                  </div>
+                )}
+                <div>
+                  <div className="font-semibold text-[#1b2b4d] text-base truncate">{selectedTxn?.senderName || 'N/A'}</div>
+                  <div className="text-slate-500 text-xs mt-0.5">{selectedTxn?.senderId || '-'}</div>
+                </div>
+              </div>
+              {selectedTxn?.senderId && selectedTxn.senderId !== '-' && (
+                <button onClick={() => handleViewProfile(selectedTxn.senderId, selectedTxn.senderName)} className="text-blue-600 text-sm font-medium mt-4 hover:underline flex items-center gap-1">
+                  View Profile <ArrowRight className="w-3 h-3 -rotate-45" />
+                </button>
+              )}
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="text-slate-500 text-sm mb-4">To (Recipient)</div>
-              <div className="font-semibold text-[#1b2b4d] text-base truncate">{selectedTxn?.recipientName || 'N/A'}</div>
-              <div className="text-slate-500 text-xs mt-1">{selectedTxn?.recipientId || '-'}</div>
-              <button className="text-blue-600 text-sm font-medium mt-4 hover:underline flex items-center gap-1">View Profile <ArrowRight className="w-3 h-3 -rotate-45" /></button>
+              <div className="flex items-center gap-4">
+                {selectedTxn?.recipientProfile ? (
+                  <img src={selectedTxn.recipientProfile.startsWith('http') ? selectedTxn.recipientProfile : `${axiosInstance.defaults.baseURL?.replace('/api', '') || 'http://192.168.1.46:5000'}/${selectedTxn.recipientProfile.replace(/^\//, '')}`} alt="Recipient" className="w-12 h-12 rounded-full object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200">
+                    {selectedTxn?.recipientName?.charAt(0) || 'R'}
+                  </div>
+                )}
+                <div>
+                  <div className="font-semibold text-[#1b2b4d] text-base truncate">{selectedTxn?.recipientName || 'N/A'}</div>
+                  <div className="text-slate-500 text-xs mt-0.5">{selectedTxn?.recipientId || '-'}</div>
+                </div>
+              </div>
+              {selectedTxn?.recipientId && selectedTxn.recipientId !== '-' && (
+                <button onClick={() => handleViewProfile(selectedTxn.recipientId, selectedTxn.recipientName)} className="text-blue-600 text-sm font-medium mt-4 hover:underline flex items-center gap-1">
+                  View Profile <ArrowRight className="w-3 h-3 -rotate-45" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -404,7 +567,14 @@ const TransactionsManagement = () => {
             <div className="space-y-5">
               <div className="flex justify-between items-center pb-4 border-b border-slate-100">
                 <span className="text-slate-500 text-sm">Transaction Hash</span>
-                <span className="font-mono text-sm text-slate-800 flex items-center gap-2">{selectedTxn?.txHash ? `${selectedTxn.txHash.substring(0, 6)}...${selectedTxn.txHash.substring(selectedTxn.txHash.length - 4)}` : '-'} {selectedTxn?.txHash && <Copy className="w-3.5 h-3.5 text-slate-400 cursor-pointer" />}</span>
+                <span className="font-mono text-sm text-slate-800 flex items-center gap-2">
+                  {selectedTxn?.txHash ? `${selectedTxn.txHash.substring(0, 6)}...${selectedTxn.txHash.substring(selectedTxn.txHash.length - 4)}` : '-'} 
+                  {selectedTxn?.txHash && (
+                    copied ? 
+                      <Check className="w-3.5 h-3.5 text-green-500" /> : 
+                      <Copy className="w-3.5 h-3.5 text-slate-400 cursor-pointer hover:text-[#1b2b4d]" onClick={handleCopyHash} />
+                  )}
+                </span>
               </div>
               <div className="flex justify-between items-center pb-4 border-b border-slate-100">
                 <span className="text-slate-500 text-sm">Location</span>
@@ -424,8 +594,8 @@ const TransactionsManagement = () => {
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
             <h3 className="font-bold text-[#1b2b4d] mb-6">Audit Trail</h3>
             <div className="relative border-l-2 border-slate-100 ml-2 space-y-8">
-              {selectedTxn?.auditTrail?.length > 0 ? selectedTxn.auditTrail.map((step, i) => (
-                <div key={i} className="pl-6 relative">
+              {selectedTxn?.auditTrail?.length > 0 ? selectedTxn.auditTrail.map((step) => (
+                <div key={step.title || step.time} className="pl-6 relative">
                   <div className="absolute w-2.5 h-2.5 bg-green-500 rounded-full border border-white" style={{ left: '-6px', top: '4px' }}></div>
                   <div className="text-sm font-semibold text-slate-800 leading-tight">{step.title}</div>
                   <div className="text-xs text-slate-400 mt-1">{step.time}</div>
@@ -456,8 +626,9 @@ const TransactionsManagement = () => {
             <h3 className="font-bold text-[#1b2b4d] mb-5">Report Details</h3>
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-bold text-[#1b2b4d] mb-2 block">Reason for Report</label>
+                <label htmlFor="reason" className="text-sm font-bold text-[#1b2b4d] mb-2 block">Reason for Report</label>
                 <input
+                  id="reason"
                   type="text"
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d]"
                   value={reportData.reason}
@@ -466,8 +637,9 @@ const TransactionsManagement = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1b2b4d]">Severity Level</label>
+                <label htmlFor="severity" className="text-sm font-bold text-[#1b2b4d]">Severity Level</label>
                 <select
+                  id="severity"
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d]"
                   value={reportData.severityLevel}
                   onChange={e => setReportData({ ...reportData, severityLevel: e.target.value })}
@@ -481,8 +653,9 @@ const TransactionsManagement = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-bold text-[#1b2b4d]">Detailed Description</label>
+                <label htmlFor="description" className="text-sm font-bold text-[#1b2b4d]">Detailed Description</label>
                 <textarea
+                  id="description"
                   className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-[#1b2b4d] focus:ring-1 focus:ring-[#1b2b4d] h-32 resize-none"
                   placeholder="Please provide details about why this transaction is being reported..."
                   value={reportData.detailedDescription}
@@ -496,30 +669,32 @@ const TransactionsManagement = () => {
             <h3 className="font-bold text-[#1b2b4d] mb-4">Immediate Actions</h3>
             <p className="text-sm text-slate-500 mb-5">Select any immediate actions to be taken on this account</p>
             <div className="space-y-4">
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label htmlFor="freezeAccount" aria-label="Temporarily freeze associated account" className="flex items-start gap-3 cursor-pointer">
                 <input
+                  id="freezeAccount"
                   type="checkbox"
                   className="mt-1 w-4 h-4 text-[#1b2b4d] rounded border-slate-300 focus:ring-[#1b2b4d]"
                   checked={reportData.freezeAccount}
                   onChange={e => setReportData({ ...reportData, freezeAccount: e.target.checked })}
                 />
-                <div>
-                  <div className="text-sm font-bold text-[#1b2b4d]">Temporarily freeze associated account</div>
-                  <div className="text-xs text-slate-500 mt-0.5">Account will be unable to perform transactions</div>
-                </div>
+                <span className="block">
+                  <span className="block text-sm font-bold text-[#1b2b4d]">Temporarily freeze associated account</span>
+                  <span className="block text-xs text-slate-500 mt-0.5">Account will be unable to perform transactions</span>
+                </span>
               </label>
 
-              <label className="flex items-start gap-3 cursor-pointer">
+              <label htmlFor="notifyUser" aria-label="Auto-notify user about investigation" className="flex items-start gap-3 cursor-pointer">
                 <input
+                  id="notifyUser"
                   type="checkbox"
                   className="mt-1 w-4 h-4 text-[#1b2b4d] rounded border-slate-300 focus:ring-[#1b2b4d]"
                   checked={reportData.notifyUser}
                   onChange={e => setReportData({ ...reportData, notifyUser: e.target.checked })}
                 />
-                <div>
-                  <div className="text-sm font-bold text-[#1b2b4d]">Auto-notify user about investigation</div>
-                  <div className="text-xs text-slate-500 mt-0.5">User will receive email notification</div>
-                </div>
+                <span className="block">
+                  <span className="block text-sm font-bold text-[#1b2b4d]">Auto-notify user about investigation</span>
+                  <span className="block text-xs text-slate-500 mt-0.5">User will receive email notification</span>
+                </span>
               </label>
             </div>
           </div>
@@ -589,6 +764,91 @@ const TransactionsManagement = () => {
       {currentView === 'list' && renderListView()}
       {currentView === 'details' && selectedTxn && renderDetailsView()}
       {currentView === 'report' && selectedTxn && renderReportView()}
+
+      {/* Profile Detail Modal */}
+      {profileModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden flex flex-col shadow-2xl relative border border-slate-200/50">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
+              <h3 className="text-lg font-bold text-[#1b2b4d]">Profile Information</h3>
+              <button 
+                onClick={() => setProfileModal({ isOpen: false, loading: false, data: null })} 
+                className="p-1.5 bg-slate-50 rounded-full hover:bg-slate-100 text-slate-500 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 bg-slate-50/50 flex-1">
+              {profileModal.loading ? (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1b2b4d]"></div>
+                  <span className="text-sm font-semibold text-slate-500">Fetching profile details...</span>
+                </div>
+              ) : profileModal.data ? (
+                <div className="space-y-6">
+                  {/* Avatar & Basic Info */}
+                  <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-extrabold text-xl border border-slate-200 shadow-inner uppercase">
+                      {profileModal.data.role === 'Super Admin' ? 'SA' : (profileModal.data.name?.charAt(0) || 'U')}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-base text-[#1b2b4d]">{profileModal.data.name}</h4>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5">{profileModal.data.role}</p>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm space-y-4">
+                    <div className="flex justify-between border-b border-slate-50 pb-3">
+                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">ID</span>
+                      <span className="font-bold text-[#1b2b4d] text-sm">{profileModal.data.id || '-'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-3">
+                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Email</span>
+                      <span className="font-semibold text-slate-600 text-sm">{profileModal.data.email || '-'}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-slate-50 pb-3">
+                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Status</span>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
+                        profileModal.data.status?.toLowerCase() === 'active' 
+                          ? 'bg-green-50 text-green-600 border border-green-100' 
+                          : 'bg-amber-50 text-amber-600 border border-amber-100'
+                      }`}>
+                        {profileModal.data.status || 'Active'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between pt-1">
+                      <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Token Balance</span>
+                      <span className="font-extrabold text-emerald-600 text-base">{profileModal.data.tokens || 'N/A'}</span>
+                    </div>
+                    {profileModal.data.fuelLiters && (
+                      <div className="flex justify-between border-t border-slate-50 pt-3">
+                        <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">Fuel Liters</span>
+                        <span className="font-extrabold text-[#1b2b4d] text-sm">{profileModal.data.fuelLiters}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-slate-500">Failed to load profile details.</div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 flex justify-end bg-white">
+              <button 
+                onClick={() => setProfileModal({ isOpen: false, loading: false, data: null })} 
+                className="px-5 py-2 rounded-xl bg-[#1b2b4d] hover:bg-slate-800 text-white text-sm font-bold transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

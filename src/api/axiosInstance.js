@@ -27,10 +27,10 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response && error.response.status === 401) {
+    if (error.response?.status === 401) {
       // Token expired ya invalid hai, auto logout
       store.dispatch(logout());
-      window.location.href = '/login';
+      globalThis.location.href = '/login';
     }
     return Promise.reject(error);
   }

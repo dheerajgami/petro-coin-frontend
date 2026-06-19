@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { loginSuccess } from '../store/slices/authSlice';
-import { Mail, Lock, ArrowRight, Droplets, AlertCircle } from 'lucide-react';
+import { Mail, Lock, ArrowRight, Droplets, AlertCircle, Eye, EyeOff, Quote } from 'lucide-react';
 import axiosInstance from '../api/axiosInstance'; // Import real API
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null); // Error state
   const dispatch = useDispatch();
@@ -24,7 +25,7 @@ const Login = () => {
       });
 
       // API Response check karna
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         dispatch(
           loginSuccess({
             user: response.data.data,
@@ -44,17 +45,51 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-950 font-sans">
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-slate-950 font-sans p-4">
       {/* Animated Glowing Background Elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[30rem] h-[30rem] bg-blue-600 rounded-full mix-blend-screen filter blur-[120px] opacity-30 animate-pulse"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[30rem] h-[30rem] bg-emerald-500 rounded-full mix-blend-screen filter blur-[120px] opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
+      <div className="absolute top-[-10%] left-[-10%] w-[40rem] h-[40rem] bg-blue-600 rounded-full mix-blend-screen filter blur-[120px] opacity-30 animate-pulse"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40rem] h-[40rem] bg-emerald-500 rounded-full mix-blend-screen filter blur-[120px] opacity-30 animate-pulse" style={{ animationDelay: '2s' }}></div>
       <div className="absolute top-[40%] left-[50%] -translate-x-1/2 w-[50rem] h-[20rem] bg-indigo-600 rounded-full mix-blend-screen filter blur-[150px] opacity-20"></div>
 
-      {/* Glassmorphic Login Card */}
-      <div className="relative z-10 w-full max-w-md p-10 backdrop-blur-2xl bg-white/[0.03] border border-white/10 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.4)]">
+      <div className="relative z-10 w-full max-w-6xl flex flex-col lg:flex-row rounded-3xl overflow-hidden shadow-[0_8px_32px_0_rgba(0,0,0,0.4)] border border-white/10 backdrop-blur-2xl bg-white/[0.03]">
+        
+        {/* Left Side: Thought/Quote Section (Hidden on small screens) */}
+        <div className="hidden lg:flex lg:w-1/2 p-12 flex-col justify-between relative overflow-hidden bg-gradient-to-br from-blue-900/40 to-slate-900/40 border-r border-white/5">
+          {/* Subtle background overlay pattern */}
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+          
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-tr from-blue-500 to-emerald-400 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(59,130,246,0.3)]">
+              <Droplets className="text-white w-5 h-5" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-white">Petro Coin</span>
+          </div>
+
+          <div className="relative z-10 my-16">
+            <Quote className="text-emerald-400/50 w-16 h-16 mb-6" />
+            <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-slate-400 leading-tight mb-6">
+              Fueling the future, empowering your transactions.
+            </h2>
+            <p className="text-lg text-slate-400 font-light leading-relaxed">
+              Experience the next generation of secure, transparent, and seamless energy trading. Petro Coin provides an advanced ecosystem to manage your assets with absolute confidence.
+            </p>
+          </div>
+
+          <div className="relative z-10 flex items-center gap-4 text-sm text-slate-500">
+            <div className="flex -space-x-3">
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=1" alt="User" />
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=2" alt="User" />
+              <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://i.pravatar.cc/100?img=3" alt="User" />
+            </div>
+            <p>Trusted by <span className="text-white font-semibold">10,000+</span> merchants worldwide</p>
+          </div>
+        </div>
+
+        {/* Right Side: Glassmorphic Login Card */}
+        <div className="w-full lg:w-1/2 p-10 sm:p-14 flex flex-col justify-center">
         
         {/* Logo & Header */}
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-8 lg:hidden">
           <div className="w-16 h-16 bg-gradient-to-tr from-blue-500 to-emerald-400 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.4)] mb-5 transform transition-all duration-500 hover:scale-110 hover:rotate-6">
             <Droplets className="text-white w-8 h-8" />
           </div>
@@ -63,6 +98,12 @@ const Login = () => {
           </h1>
           <p className="text-slate-400 mt-2 text-sm font-light">Secure Access Portal</p>
         </div>
+
+        <div className="hidden lg:block mb-10 text-center">
+          <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+          <p className="text-slate-400 text-sm">Please enter your details to sign in.</p>
+        </div>
+
 
         {/* Error Message Alert */}
         {error && (
@@ -76,12 +117,13 @@ const Login = () => {
         <form onSubmit={handleLogin} className="space-y-5">
           {/* Email Input */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-300 ml-1">Email Address</label>
+            <label htmlFor="login-email" className="text-sm font-medium text-slate-300 ml-1">Email Address</label>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-blue-400 transition-colors">
                 <Mail className="w-5 h-5" />
               </div>
               <input
+                id="login-email"
                 type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -95,21 +137,29 @@ const Login = () => {
           {/* Password Input */}
           <div className="space-y-2">
             <div className="flex justify-between items-center ml-1">
-              <label className="text-sm font-medium text-slate-300">Password</label>
-              <a href="#" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">Forgot Password?</a>
+              <label htmlFor="login-password" className="text-sm font-medium text-slate-300">Password</label>
+              <button type="button" className="text-xs text-blue-400 hover:text-blue-300 transition-colors bg-transparent border-none p-0 cursor-pointer">Forgot Password?</button>
             </div>
             <div className="relative group">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500 group-focus-within:text-blue-400 transition-colors">
                 <Lock className="w-5 h-5" />
               </div>
               <input
-                type="password"
+                id="login-password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 backdrop-blur-sm shadow-inner"
+                className="w-full pl-12 pr-12 py-3.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300 backdrop-blur-sm shadow-inner"
                 placeholder="••••••••"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-500 hover:text-blue-400 transition-colors focus:outline-none"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
@@ -128,6 +178,7 @@ const Login = () => {
             </span>
           </button>
         </form>
+        </div>
       </div>
     </div>
   );

@@ -1,30 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Globe, Shield, Bell, Users, Save, Users2, ChevronDown } from 'lucide-react';
+import { Globe, Shield, Bell, Users2, ChevronDown } from 'lucide-react';
 import axiosInstance from '../../api/axiosInstance';
 
+/* eslint-disable react/prop-types */
 const ToggleSwitch = ({ enabled, setEnabled }) => (
-  <div 
+  <button
+    type="button"
+    role="switch"
+    aria-checked={enabled}
     className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${enabled ? 'bg-[#1b2b4d]' : 'bg-slate-300'}`}
     onClick={() => setEnabled(!enabled)}
   >
     <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-transform duration-200 ease-in-out ${enabled ? 'translate-x-5' : 'translate-x-0'}`}></div>
-  </div>
+  </button>
 );
 
 const CustomCheckbox = ({ checked, onChange, label }) => (
   <label className="flex items-center gap-3 cursor-pointer group">
     <div className="relative flex items-center justify-center">
-      <input 
-        type="checkbox" 
-        className="sr-only" 
-        checked={checked} 
-        onChange={(e) => onChange(e.target.checked)} 
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
       />
       <div className={`w-5 h-5 rounded border ${checked ? 'bg-[#1b2b4d] border-[#1b2b4d]' : 'bg-white border-slate-300 group-hover:border-slate-400'} transition-colors flex items-center justify-center`}>
         {checked && (
           <svg className="w-3.5 h-3.5 text-white pointer-events-none" viewBox="0 0 14 14" fill="none">
-            <path d="M3 8L6 11L11 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M3 8L6 11L11 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </div>
@@ -45,7 +49,7 @@ const SystemSettings = () => {
 
   // State for General
   const [siteName, setSiteName] = useState('');
-  const [siteUrl, setSiteUrl] = useState(''); 
+  const [siteUrl, setSiteUrl] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
 
   // State for Security
@@ -94,8 +98,8 @@ const SystemSettings = () => {
           });
           setApiLogs(data.log_api_requests || false);
           setAuditLogs(data.log_admin_actions || false);
-          
-          if(data.last_updated) {
+
+          if (data.last_updated) {
             setLastUpdated(new Date(data.last_updated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
           }
           setDocUrl(data.documentation_url || '');
@@ -117,8 +121,8 @@ const SystemSettings = () => {
         site_name: siteName,
         site_url: siteUrl,
         admin_email: adminEmail,
-        max_login_attempts: parseInt(maxLoginAttempts),
-        session_timeout: parseInt(sessionTimeout),
+        max_login_attempts: Number.parseInt(maxLoginAttempts),
+        session_timeout: Number.parseInt(sessionTimeout),
         require_2fa: twoFactor,
         receive_email_alerts: emailNotif,
         receive_sms_alerts: smsNotif,
@@ -130,36 +134,36 @@ const SystemSettings = () => {
         log_api_requests: apiLogs,
         log_admin_actions: auditLogs
       };
-      
+
       const response = await axiosInstance.put('/admin/settings', payload);
       let pwdSuccess = true;
-      if(newPassword) {
-        if(newPassword !== confirmPassword) {
-           alert("New password and confirm password do not match!");
-           pwdSuccess = false;
-        } else if(!currentPassword) {
-           alert("Please provide the current password to set a new password.");
-           pwdSuccess = false;
+      if (newPassword) {
+        if (newPassword !== confirmPassword) {
+          alert("New password and confirm password do not match!");
+          pwdSuccess = false;
+        } else if (currentPassword) {
+          try {
+            await axiosInstance.post('/admin/settings/change-password', {
+              currentPassword, newPassword, confirmPassword
+            });
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+          } catch (e) {
+            console.error("Failed to change password", e);
+            alert("Failed to change password");
+            pwdSuccess = false;
+          }
         } else {
-           try {
-             await axiosInstance.post('/admin/settings/change-password', {
-               currentPassword, newPassword, confirmPassword
-             });
-             setCurrentPassword('');
-             setNewPassword('');
-             setConfirmPassword('');
-           } catch(e) {
-             console.error("Failed to change password", e);
-             alert("Failed to change password");
-             pwdSuccess = false;
-           }
+          alert("Please provide the current password to set a new password.");
+          pwdSuccess = false;
         }
       }
-      
-      if(response.data?.success && pwdSuccess) {
+
+      if (response.data?.success && pwdSuccess) {
         alert("Settings saved successfully!");
       }
-    } catch(err) {
+    } catch (err) {
       console.error("Failed to save settings", err);
       alert("Failed to save settings");
     }
@@ -173,7 +177,7 @@ const SystemSettings = () => {
         </div>
       );
     }
-    switch(activeTab) {
+    switch (activeTab) {
       case 'General':
         return (
           <div className="animate-in fade-in duration-300">
@@ -189,18 +193,20 @@ const SystemSettings = () => {
 
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Site Name</label>
-                <input 
-                  type="text" 
+                <label htmlFor="siteName" className="block text-sm font-bold text-slate-700 mb-2">Site Name</label>
+                <input
+                  id="siteName"
+                  type="text"
                   value={siteName}
                   onChange={(e) => setSiteName(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Site URL</label>
-                <input 
-                  type="text" 
+                <label htmlFor="siteUrl" className="block text-sm font-bold text-slate-700 mb-2">Site URL</label>
+                <input
+                  id="siteUrl"
+                  type="text"
                   value={siteUrl}
                   onChange={(e) => setSiteUrl(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium"
@@ -209,9 +215,10 @@ const SystemSettings = () => {
             </div>
 
             <div className="mb-10">
-              <label className="block text-sm font-bold text-slate-700 mb-2">Admin Email</label>
-              <input 
-                type="email" 
+              <label htmlFor="adminEmail" className="block text-sm font-bold text-slate-700 mb-2">Admin Email</label>
+              <input
+                id="adminEmail"
+                type="email"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium"
@@ -247,9 +254,10 @@ const SystemSettings = () => {
 
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div className="relative">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Max Login Attempts</label>
+                <label htmlFor="maxLoginAttempts" className="block text-sm font-bold text-slate-700 mb-2">Max Login Attempts</label>
                 <div className="relative">
-                  <select 
+                  <select
+                    id="maxLoginAttempts"
                     value={maxLoginAttempts}
                     onChange={(e) => setMaxLoginAttempts(e.target.value)}
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg appearance-none focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium"
@@ -262,9 +270,10 @@ const SystemSettings = () => {
                 </div>
               </div>
               <div className="relative">
-                <label className="block text-sm font-bold text-slate-700 mb-2">Session Timeout (minutes)</label>
+                <label htmlFor="sessionTimeout" className="block text-sm font-bold text-slate-700 mb-2">Session Timeout (minutes)</label>
                 <div className="relative">
-                  <select 
+                  <select
+                    id="sessionTimeout"
                     value={sessionTimeout}
                     onChange={(e) => setSessionTimeout(e.target.value)}
                     className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg appearance-none focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium"
@@ -289,27 +298,30 @@ const SystemSettings = () => {
             <h3 className="text-xl font-bold text-slate-800 mb-6">Change Admin Password</h3>
             <div className="space-y-6">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Current Password</label>
-                <input 
-                  type="password" 
+                <label htmlFor="currentPassword" className="block text-sm font-bold text-slate-700 mb-2">Current Password</label>
+                <input
+                  id="currentPassword"
+                  type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium tracking-widest placeholder:tracking-normal"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">New Password</label>
-                <input 
-                  type="password" 
+                <label htmlFor="newPassword" className="block text-sm font-bold text-slate-700 mb-2">New Password</label>
+                <input
+                  id="newPassword"
+                  type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium tracking-widest placeholder:tracking-normal"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Confirm Password</label>
-                <input 
-                  type="password" 
+                <label htmlFor="confirmPassword" className="block text-sm font-bold text-slate-700 mb-2">Confirm Password</label>
+                <input
+                  id="confirmPassword"
+                  type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-400 text-slate-800 text-sm font-medium tracking-widest placeholder:tracking-normal"
@@ -351,30 +363,30 @@ const SystemSettings = () => {
 
             <h3 className="text-xl font-bold text-slate-800 mb-6">Notification Types</h3>
             <div className="space-y-5 pl-2">
-              <CustomCheckbox 
-                label="New merchant registration" 
-                checked={notifTypes.newMerchant} 
-                onChange={(c) => setNotifTypes({...notifTypes, newMerchant: c})} 
+              <CustomCheckbox
+                label="New merchant registration"
+                checked={notifTypes.newMerchant}
+                onChange={(c) => setNotifTypes({ ...notifTypes, newMerchant: c })}
               />
-              <CustomCheckbox 
-                label="KYC verification required" 
-                checked={notifTypes.kycRequired} 
-                onChange={(c) => setNotifTypes({...notifTypes, kycRequired: c})} 
+              <CustomCheckbox
+                label="KYC verification required"
+                checked={notifTypes.kycRequired}
+                onChange={(c) => setNotifTypes({ ...notifTypes, kycRequired: c })}
               />
-              <CustomCheckbox 
-                label="Transaction flagged" 
-                checked={notifTypes.transactionFlagged} 
-                onChange={(c) => setNotifTypes({...notifTypes, transactionFlagged: c})} 
+              <CustomCheckbox
+                label="Transaction flagged"
+                checked={notifTypes.transactionFlagged}
+                onChange={(c) => setNotifTypes({ ...notifTypes, transactionFlagged: c })}
               />
-              <CustomCheckbox 
-                label="High volume alert" 
-                checked={notifTypes.highVolume} 
-                onChange={(c) => setNotifTypes({...notifTypes, highVolume: c})} 
+              <CustomCheckbox
+                label="High volume alert"
+                checked={notifTypes.highVolume}
+                onChange={(c) => setNotifTypes({ ...notifTypes, highVolume: c })}
               />
-              <CustomCheckbox 
-                label="System error" 
-                checked={notifTypes.systemError} 
-                onChange={(c) => setNotifTypes({...notifTypes, systemError: c})} 
+              <CustomCheckbox
+                label="System error"
+                checked={notifTypes.systemError}
+                onChange={(c) => setNotifTypes({ ...notifTypes, systemError: c })}
               />
             </div>
           </div>
@@ -425,7 +437,7 @@ const SystemSettings = () => {
               <div className="bg-slate-100/60 border border-slate-300 rounded-lg p-5">
                 <h4 className="text-base font-bold text-slate-800 mb-1">Documentation</h4>
                 <p className="text-sm text-slate-700 font-medium mb-4">Access complete documentation and guides</p>
-                <button 
+                <button
                   onClick={() => docUrl && window.open(docUrl, '_blank')}
                   className="bg-transparent border border-slate-400 hover:bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                 >
@@ -437,7 +449,7 @@ const SystemSettings = () => {
               <div className="bg-green-50 border border-green-300 rounded-lg p-5">
                 <h4 className="text-base font-bold text-green-600 mb-1">Support Center</h4>
                 <p className="text-sm text-green-600 font-medium mb-4">Contact our support team for assistance</p>
-                <button 
+                <button
                   onClick={() => supportPortal && window.open(supportPortal, '_blank')}
                   className="bg-transparent border border-green-300 hover:bg-white text-green-600 px-6 py-2 rounded-lg text-sm font-semibold transition-colors"
                 >
@@ -449,7 +461,7 @@ const SystemSettings = () => {
               <div className="bg-purple-50 border border-purple-300 rounded-lg p-5">
                 <h4 className="text-base font-bold text-purple-600 mb-1">FAQ</h4>
                 <p className="text-sm text-purple-600 font-medium mb-4">Common questions and troubleshooting</p>
-                <button 
+                <button
                   onClick={() => alert("FAQ module is currently not available.")}
                   className="bg-transparent border border-purple-300 hover:bg-white text-purple-600 px-6 py-2 rounded-lg text-sm font-semibold transition-colors"
                 >
@@ -466,7 +478,7 @@ const SystemSettings = () => {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-6 relative pb-10">
-      
+
       {/* Welcome Banner */}
       <div className="bg-[#a2c8db] rounded-xl p-8 relative overflow-hidden flex items-center shadow-sm">
         <div className="relative z-10">
@@ -490,11 +502,10 @@ const SystemSettings = () => {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${
-              activeTab === tab 
-                ? 'bg-white text-slate-800 shadow-sm' 
-                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
-            }`}
+            className={`flex-1 min-w-[120px] py-2.5 px-4 rounded-lg text-sm font-semibold transition-all duration-200 whitespace-nowrap ${activeTab === tab
+              ? 'bg-white text-slate-800 shadow-sm'
+              : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
+              }`}
           >
             {tab}
           </button>

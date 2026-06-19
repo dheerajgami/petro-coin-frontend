@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Eye, MoreVertical, Send, Clock, Navigation, MapPin, ChevronLeft, ChevronRight, ArrowLeft, ChevronDown } from 'lucide-react';
+import { Search, Filter, Eye, MoreVertical, Clock, Navigation, ArrowLeft, ChevronDown, Trash2 } from 'lucide-react';
 import Pagination from '../../components/Pagination';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../../api/axiosInstance';
@@ -28,7 +28,7 @@ const TransporterManagement = () => {
     route: item.route || { boardingPoint: 'N/A', destination: 'N/A' },
     tokensUsed: item.tokensUsed || item.tokens_used || item.amount || 0,
     verification: item.verification || item.verificationStatus || item.verification_status || 'QR Code',
-    status: item.status === 'SUCCESS' ? 'Completed' : item.status === 'FAILED' ? 'Failed' : item.status || 'Pending',
+    status: { SUCCESS: 'Completed', FAILED: 'Failed' }[item.status] || item.status || 'Pending',
     timestamp: item.timestamp || item.createdAt || item.created_at ? new Date(item.timestamp || item.createdAt || item.created_at).toLocaleString() : ''
   });
 
@@ -40,6 +40,26 @@ const TransporterManagement = () => {
     setSelectedJourney(journey);
     setCurrentView(view);
     setActiveDropdown(null);
+  };
+
+  const handleDeleteJourney = async (transactionId) => {
+    if (!window.confirm("Are you sure you want to delete this transporter transaction/journey?")) {
+      return;
+    }
+    try {
+      const res = await axiosInstance.delete(`/admin/transporters/${transactionId}`);
+      if (res.data?.success) {
+        alert("Transporter journey deleted successfully.");
+        fetchDashboardData();
+      } else {
+        alert(res.data?.message || "Failed to delete journey.");
+      }
+    } catch (err) {
+      console.error("Failed to delete journey", err);
+      alert(err.response?.data?.message || "Failed to delete journey.");
+    } finally {
+      setActiveDropdown(null);
+    }
   };
 
   const fetchDashboardData = async () => {
@@ -117,6 +137,71 @@ const TransporterManagement = () => {
       {currentView === 'details' && selectedJourney && renderDetailsView()}
     </div>
   );
+  function renderTableBody(currentJourneys) {
+    if (loading) {
+      return [
+        <tr key="loading"><td colSpan="9" className="text-center py-10 text-slate-500">Loading journeys...</td></tr>
+      ];
+    }
+    if (journeys.length === 0) {
+      return [
+        <tr key="empty"><td colSpan="9" className="text-center py-10 text-slate-500">No journeys found</td></tr>
+      ];
+    }
+    return currentJourneys.map((journey, index) => (
+      <tr key={journey.transactionId || index} className="hover:bg-slate-50 transition-colors">
+        <td className="px-6 py-4 font-medium text-slate-600">{journey.transactionId}</td>
+        <td className="px-6 py-4 font-semibold text-slate-700">{journey.conductor}</td>
+        <td className="px-6 py-4 text-slate-700">{journey.customer}</td>
+        <td className="px-6 py-4">
+          <div className="flex flex-col text-xs text-slate-500 gap-1.5">
+            <div className="flex items-center gap-1.5"><Navigation className="w-3 h-3 rotate-45 text-slate-400" /> {journey.route?.boardingPoint}</div>
+            <div className="flex items-center gap-1.5"><Clock className="w-3 h-3 text-slate-400" /> {journey.route?.destination}</div>
+          </div>
+        </td>
+        <td className="px-6 py-4">
+          <span className="bg-blue-50 text-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold">
+            {journey.tokensUsed}
+          </span>
+        </td>
+        <td className="px-6 py-4">
+          <span className="border border-purple-200 text-purple-600 bg-purple-50 px-3 py-1 rounded-full text-[11px] font-bold">
+            {journey.verification || 'QR Code'}
+          </span>
+        </td>
+        <td className="px-6 py-4">
+          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${journey.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-600'}`}>
+            {journey.status === 'Completed' ? '✓ Completed' : 'Pending'}
+          </span>
+        </td>
+        <td className="px-6 py-4 text-slate-600">{journey.timestamp}</td>
+        <td className="px-6 py-4 text-center relative">
+          <button
+            onClick={() => setActiveDropdown(activeDropdown === journey.transactionId ? null : journey.transactionId)}
+            className="p-1.5 rounded hover:bg-slate-200 text-slate-600 transition-colors"
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          {activeDropdown === journey.transactionId && (
+            <div className="absolute right-10 top-8 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-[999] py-1 text-left">
+              <button 
+                onClick={() => handleAction('details', journey)}
+                className="w-full text-left px-4 py-2.5 text-sm text-[#1b2b4d] hover:bg-slate-50 flex items-center gap-3 font-semibold transition-colors"
+              >
+                <Eye className="w-4 h-4 text-slate-400" /> View details
+              </button>
+              <button 
+                onClick={() => handleDeleteJourney(journey.transactionId)}
+                className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 font-semibold transition-colors border-t border-slate-100"
+              >
+                <Trash2 className="w-4 h-4 text-red-400" /> Delete journey
+              </button>
+            </div>
+          )}
+        </td>
+      </tr>
+    ));
+  };
 
   function renderListView() {
     const indexOfLastItem = currentPage * itemsPerPage;
@@ -135,8 +220,8 @@ const TransporterManagement = () => {
             { label: 'Pending Verification', value: stats.pendingVerification },
             { label: 'Tokens Redeemed', value: stats.tokensRedeemed },
             { label: 'Active Conductors', value: stats.activeConductors },
-          ].map((stat, i) => (
-            <div key={i} className="bg-white rounded-xl p-5 border border-slate-200 flex flex-col flex-1 min-w-[150px] shadow-sm">
+          ].map((stat) => (
+            <div key={stat.label} className="bg-white rounded-xl p-5 border border-slate-200 flex flex-col flex-1 min-w-[150px] shadow-sm">
               <div className="text-2xl font-bold text-[#1b2b4d] mb-1">{stat.value}</div>
               <div className="text-xs font-semibold text-slate-500">{stat.label}</div>
             </div>
@@ -206,59 +291,7 @@ const TransporterManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr><td colSpan="9" className="text-center py-10 text-slate-500">Loading journeys...</td></tr>
-              ) : journeys.length === 0 ? (
-                <tr><td colSpan="9" className="text-center py-10 text-slate-500">No journeys found</td></tr>
-              ) : (
-                currentJourneys.map((journey, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-600">{journey.transactionId}</td>
-                    <td className="px-6 py-4 font-semibold text-slate-700">{journey.conductor}</td>
-                    <td className="px-6 py-4 text-slate-700">{journey.customer}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col text-xs text-slate-500 gap-1.5">
-                        <div className="flex items-center gap-1.5"><Navigation className="w-3 h-3 rotate-45 text-slate-400" /> {journey.route?.boardingPoint}</div>
-                        <div className="flex items-center gap-1.5"><Clock className="w-3 h-3 text-slate-400" /> {journey.route?.destination}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="bg-blue-50 text-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold">
-                        {journey.tokensUsed}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="border border-purple-200 text-purple-600 bg-purple-50 px-3 py-1 rounded-full text-[11px] font-bold">
-                        {journey.verification || 'QR Code'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${journey.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-600'}`}>
-                        {journey.status === 'Completed' ? '✓ Completed' : 'Pending'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-slate-600">{journey.timestamp}</td>
-                    <td className="px-6 py-4 text-center relative">
-                      <button
-                        onClick={() => setActiveDropdown(activeDropdown === journey.transactionId ? null : journey.transactionId)}
-                        className="p-1.5 rounded hover:bg-slate-200 text-slate-600 transition-colors"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                      {activeDropdown === journey.transactionId && (
-                        <div className="absolute right-10 top-8 w-40 bg-white border border-slate-200 rounded-lg shadow-xl z-[999] py-1 text-left">
-                          <button 
-                            onClick={() => handleAction('details', journey)}
-                            className="w-full text-left px-4 py-2.5 text-sm text-[#1b2b4d] hover:bg-slate-50 flex items-center gap-3 font-semibold transition-colors"
-                          >
-                            <Eye className="w-4 h-4 text-slate-400" /> View details
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
+              {renderTableBody(currentJourneys)}
             </tbody>
           </table>
         </div>

@@ -19,7 +19,7 @@ const InventoryManagement = () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get('/merchant/inventory');
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         setInventory(response.data.data);
       }
     } catch (err) {
@@ -38,24 +38,20 @@ const InventoryManagement = () => {
     try {
       setIsSubmitting(true);
       
-      // MOCK API CALL for adding inventory (Replace with actual endpoint when available)
-      // await axiosInstance.post('/merchant/inventory/add', {
-      //   denomination: Number(selectedDenomination),
-      //   units: Number(unitsToAdd)
-      // });
+      await axiosInstance.post('/merchant/inventory-request', {
+        denomination: Number(selectedDenomination),
+        quantity: Number(unitsToAdd)
+      });
       
-      // Simulating a network delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      alert('Inventory added successfully! (Mock API)');
+      alert('Inventory request sent successfully!');
       setIsModalOpen(false);
       setSelectedDenomination('');
       setUnitsToAdd('');
       
       fetchInventory(); // Refresh data
     } catch (err) {
-      console.error('Failed to add inventory:', err);
-      alert('Failed to add inventory.');
+      console.error('Failed to request inventory:', err);
+      alert(err.response?.data?.message || 'Failed to request inventory.');
     } finally {
       setIsSubmitting(false);
     }
@@ -78,7 +74,7 @@ const InventoryManagement = () => {
       {/* Welcome Banner */}
       <div className="bg-[#59111c] rounded-xl p-6 relative overflow-hidden shadow-sm">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          Welcome Back, {user?.name ? (user.name.includes('Mr') ? user.name : `Mr. ${user.name}`) : 'Mr. John'} 👋
+          Welcome Back, {user?.username || user?.businessName || user?.name || 'Merchant'} 👋
         </h2>
         <p className="text-red-100 mt-1 text-sm font-medium">Have a good day..</p>
       </div>
@@ -132,7 +128,7 @@ const InventoryManagement = () => {
               const fillPercentage = Math.min((available / total) * 100, 100);
 
               return (
-                <div key={index} className="flex items-center gap-6">
+                <div key={item.denomination} className="flex items-center gap-6">
                   {/* Numbering */}
                   <span className="text-slate-400 font-medium text-sm w-6">
                     {(index + 1).toString().padStart(2, '0')}
@@ -191,25 +187,34 @@ const InventoryManagement = () => {
             <div className="p-6">
               <form className="space-y-5" onSubmit={handleAddInventory}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-2">Token Denomination</label>
-                  <select 
+                  <label htmlFor="tokenDenomination" className="block text-xs font-bold text-slate-800 mb-2">Token Denomination</label>
+                  <input 
+                    id="tokenDenomination"
+                    list="denominations-list"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
                     value={selectedDenomination}
                     onChange={(e) => setSelectedDenomination(e.target.value)}
+                    placeholder="Select or type denomination (e.g. 0.50)"
                     className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-[#59111c] focus:border-[#59111c] bg-white text-slate-800" 
                     required 
-                  >
-                    <option value="" disabled>Select Denomination</option>
-                    {breakdown.map((item, idx) => (
-                      <option key={idx} value={item.denomination}>
-                        ₹{item.denomination}
-                      </option>
+                  />
+                  <datalist id="denominations-list">
+                    <option value="0.50" />
+                    <option value="0.25" />
+                    <option value="0.10" />
+                    <option value="0.05" />
+                    {breakdown.map((item) => (
+                      <option key={item.denomination} value={item.denomination} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-2">Number of Units to Add</label>
+                  <label htmlFor="unitsToAdd" className="block text-xs font-bold text-slate-800 mb-2">Number of Units to Add</label>
                   <input 
+                    id="unitsToAdd"
                     type="number" 
                     min="1"
                     value={unitsToAdd}

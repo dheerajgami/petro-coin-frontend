@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import PropTypes from 'prop-types';
 import { Store, TrendingUp, Coins, Tag } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  PieChart, Pie, Cell 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell
 } from 'recharts';
 import axiosInstance from '../../api/axiosInstance';
 
@@ -12,7 +13,7 @@ const PIE_COLORS = ['#3b82f6', '#f97316', '#ef4444', '#10b981', '#8b5cf6'];
 
 // Custom tooltip for Bar Charts
 const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
+  if (active && payload?.length) {
     return (
       <div className="bg-white px-4 py-2 border border-slate-200 shadow-xl rounded-lg text-center relative z-50">
         <p className="font-bold text-slate-800 text-xs mb-1">{label}</p>
@@ -26,9 +27,15 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
+CustomTooltip.propTypes = {
+  active: PropTypes.bool,
+  payload: PropTypes.array,
+  label: PropTypes.string
+};
+
 const MerchantDashboard = () => {
   const { user } = useSelector((state) => state.auth);
-  
+
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +44,7 @@ const MerchantDashboard = () => {
       try {
         setLoading(true);
         const response = await axiosInstance.get('/merchant/dashboard');
-        if (response.data && response.data.success) {
+        if (response.data?.success) {
           setDashboardData(response.data.data);
         }
       } catch (err) {
@@ -84,11 +91,11 @@ const MerchantDashboard = () => {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 p-8 relative font-sans">
-      
+
       {/* Welcome Banner */}
       <div className="bg-[#59111c] rounded-xl p-6 relative overflow-hidden shadow-sm">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          Welcome Back, {user?.name ? (user.name.includes('Mr') ? user.name : `Mr. ${user.name}`) : 'Mr. John'} 👋
+          Welcome Back, {user?.username || user?.businessName || user?.name || 'Merchant'} 👋
         </h2>
         <p className="text-red-100 mt-1 text-sm font-medium">Have a good day..</p>
       </div>
@@ -168,7 +175,7 @@ const MerchantDashboard = () => {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
+
         {/* Revenue Distribution Chart */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="p-5 border-b border-[#59111c] border-b-2 border-opacity-90">
@@ -182,7 +189,7 @@ const MerchantDashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#475569' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#475569' }} domain={[0, maxRevenue * 1.2]} />
-                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
                   <Bar dataKey="value" fill="#10b981" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -205,7 +212,7 @@ const MerchantDashboard = () => {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#475569' }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#475569' }} domain={[0, maxMinted * 1.2]} />
-                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'transparent'}} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
                   <Bar dataKey="value" fill="#3b82f6" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -225,7 +232,7 @@ const MerchantDashboard = () => {
             <h3 className="text-lg font-bold text-slate-800">DFS Fixed Token Usage</h3>
             <p className="text-xs text-slate-500 mt-0.5">Allocation vs Current Utilization</p>
           </div>
-          
+
           <div className="w-full max-w-[300px] h-[250px] relative">
             {PieData.length > 0 ? (
               <>
@@ -241,11 +248,11 @@ const MerchantDashboard = () => {
                       dataKey="value"
                       stroke="none"
                     >
-                      {PieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      {PieData.map((entry) => (
+                        <Cell key={`cell-${entry.name}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip 
+                    <Tooltip
                       contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                       itemStyle={{ color: '#1e293b', fontWeight: 'bold' }}
                     />
@@ -264,8 +271,8 @@ const MerchantDashboard = () => {
           {/* Dynamic Legend */}
           {PieData.length > 0 && (
             <div className="w-full grid grid-cols-2 sm:grid-cols-3 gap-3 mt-6">
-              {PieData.map((item, idx) => (
-                <div key={idx} className="flex flex-col items-start text-left bg-slate-50 p-2 rounded-lg border border-slate-100">
+              {PieData.map((item) => (
+                <div key={item.name} className="flex flex-col items-start text-left bg-slate-50 p-2 rounded-lg border border-slate-100">
                   <div className="flex items-center gap-1.5 mb-1">
                     <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></span>
                     <span className="text-[10px] text-slate-700 font-bold leading-tight truncate w-full" title={item.name}>{item.name}</span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Search, Filter, Eye, XCircle, CheckCircle2, PlusCircle, ChevronLeft, ChevronRight, X, ChevronDown } from 'lucide-react';
+import { Package, Search, Filter, Eye, XCircle, CheckCircle2, PlusCircle, X, ChevronDown, Trash2 } from 'lucide-react';
 import Pagination from '../../components/Pagination';
 import axiosInstance from '../../api/axiosInstance';
 
@@ -15,8 +15,8 @@ const MerchantManagement = () => {
     merchantList: []
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('all');
+
+
   const [searchQuery, setSearchQuery] = useState('');
 
   // Pagination State
@@ -42,28 +42,54 @@ const MerchantManagement = () => {
   const [outletError, setOutletError] = useState('');
 
   // Normalize merchant data - maps filter/search API field names to table field names
-  const normalizeMerchant = (item) => ({
-    merchantId: item.merchantId || item.merchant_id || '',
-    businessName: item.businessName || item.business_name || '',
-    applicant: item.applicant || item.name || item.full_name || '',
-    contact: item.contact || item.mobile || item.phone || '',
-    date: item.date
-      ? item.date
-      : item.createdAt
-      ? new Date(item.createdAt).toISOString().split('T')[0]
-      : '',
-    status: item.status || '',
-    preMint: item.preMint || item.tokenBalance || null,
-    email: item.email || '',
-    address: item.address || '',
-  });
+  const normalizeMerchant = (item) => {
+    let normalizedDate = '';
+    if (item.date) {
+      normalizedDate = item.date;
+    } else if (item.createdAt) {
+      normalizedDate = new Date(item.createdAt).toISOString().split('T')[0];
+    }
+
+    return {
+      merchantId: item.merchantId || item.merchant_id || '',
+      businessName: item.businessName || item.business_name || '',
+      applicant: item.applicant || item.name || item.full_name || '',
+      contact: item.contact || item.mobile || item.phone || '',
+      date: normalizedDate,
+      status: item.status || '',
+      preMint: item.preMint || item.tokenBalance || null,
+      email: item.email || '',
+      address: item.address || '',
+    };
+  };
+
+  const getStatusClass = (status) => {
+    const s = status?.toLowerCase() || '';
+    if (s === 'pending') return 'bg-orange-100 text-orange-600';
+    if (s === 'active' || s === 'approved') return 'bg-emerald-100 text-emerald-600';
+    return 'bg-red-100 text-red-600';
+  };
+
+  const getDrawerStatusClass = (status) => {
+    const s = status?.toLowerCase() || '';
+    if (s === 'rejected') return 'text-red-600 focus:ring-red-500';
+    if (s === 'active' || s === 'approved') return 'text-emerald-600 focus:ring-emerald-500';
+    return 'text-orange-600 focus:ring-orange-500';
+  };
+
+  const getDrawerStatusValue = (status) => {
+    const s = status?.toLowerCase() || '';
+    if (s === 'active' || s === 'approved') return 'Approved';
+    if (s === 'rejected') return 'Rejected';
+    return 'Pending';
+  };
 
   // Fetch API Data
   const fetchMerchantData = async () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get('/admin/merchantManagement');
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         setData({
           dashboard: response.data.data.dashboard || {},
           merchantList: response.data.data.merchantList || []
@@ -71,7 +97,6 @@ const MerchantManagement = () => {
       }
     } catch (err) {
       console.error("Failed to fetch merchant data:", err);
-      setError("Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -146,21 +171,31 @@ const MerchantManagement = () => {
       }));
 
       // 2. Send the API request
-      const response = await axiosInstance.put(`/admin/merchant/${merchantId}/activate`, {
+      await axiosInstance.put(`/admin/merchant/${merchantId}/activate`, {
         status: apiStatus
       });
 
-      if (response.data && response.data.success) {
-        // Refresh the table data in background to sync with server
-        fetchMerchantData();
-      } else {
-        // Revert on failure
-        fetchMerchantData();
-      }
+      // Refresh the table data in background to sync with server
+      // Also reverts on failure or updates on success
+      fetchMerchantData();
     } catch (error) {
       console.error("Error updating status:", error);
       fetchMerchantData(); // Revert on failure
       alert("Failed to update status. Please check your network or API endpoint.");
+    }
+  };
+
+  const handleDeleteMerchant = async (merchantId) => {
+    if (!globalThis.confirm(`Are you sure you want to delete merchant ${merchantId}?`)) return;
+    try {
+      const response = await axiosInstance.delete(`/admin/users/${merchantId}`);
+      if (response.data?.success) {
+        alert("Merchant deleted successfully.");
+        fetchMerchantData();
+      }
+    } catch (err) {
+      console.error("Failed to delete merchant:", err);
+      alert(err.response?.data?.message || "Failed to delete merchant.");
     }
   };
 
@@ -243,8 +278,8 @@ const MerchantManagement = () => {
           { label: 'Pending Approval', value: data?.dashboard?.pendingApproval || '0' },
           { label: 'Approved', value: data?.dashboard?.approved || '0' },
           { label: 'Pre-Mint Pending', value: data?.dashboard?.preMintPending || '0' },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
+        ].map((stat) => (
+          <div key={stat.label} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <h3 className="text-base font-semibold text-slate-800 mb-1">{stat.label}</h3>
               <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
@@ -331,19 +366,15 @@ const MerchantManagement = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {currentMerchants.length > 0 ? currentMerchants.map((item, index) => (
-                <tr key={index} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium cursor-pointer" onDoubleClick={() => openDrawer(item)}>
+              {currentMerchants.length > 0 ? currentMerchants.map((item) => (
+                <tr key={item.merchantId} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium cursor-pointer" onDoubleClick={() => openDrawer(item)}>
                   <td className="px-6 py-5">{item.merchantId}</td>
                   <td className="px-6 py-5">{item.businessName}</td>
                   <td className="px-6 py-5">{item.applicant}</td>
                   <td className="px-6 py-5">{item.contact}</td>
                   <td className="px-6 py-5">{item.date}</td>
                   <td className="px-6 py-5">
-                    <span className={`px-3 py-1 rounded-md text-xs font-semibold capitalize ${
-                      item.status === 'pending' ? 'bg-orange-100 text-orange-600' :
-                      item.status === 'active' || item.status === 'approved' ? 'bg-emerald-100 text-emerald-600' :
-                      'bg-red-100 text-red-600'
-                    }`}>
+                    <span className={`px-3 py-1 rounded-md text-xs font-semibold capitalize ${getStatusClass(item.status)}`}>
                       {item.status}
                     </span>
                   </td>
@@ -370,6 +401,14 @@ const MerchantManagement = () => {
                           <PlusCircle className="w-4 h-4" />
                         </button>
                       )}
+
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteMerchant(item.merchantId); }} 
+                        className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center text-red-600 hover:bg-red-200 transition-colors" 
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -399,9 +438,11 @@ const MerchantManagement = () => {
       {isDrawerOpen && (
         <div className="fixed inset-0 z-50 flex justify-end">
           {/* Backdrop */}
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
           <div 
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={closeDrawer}
+            aria-hidden="true"
           ></div>
           
           {/* Drawer Panel */}
@@ -421,26 +462,23 @@ const MerchantManagement = () => {
               {/* Form Grid 1 */}
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-2">Merchant ID</label>
-                  <input type="text" readOnly value={selectedMerchant?.id || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                  <label htmlFor="drawer-merchantId" className="block text-sm font-semibold text-slate-800 mb-2">Merchant ID</label>
+                  <input id="drawer-merchantId" type="text" readOnly value={selectedMerchant?.id || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-2">Business Name</label>
-                  <input type="text" readOnly value={selectedMerchant?.businessName || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                  <label htmlFor="drawer-businessName" className="block text-sm font-semibold text-slate-800 mb-2">Business Name</label>
+                  <input id="drawer-businessName" type="text" readOnly value={selectedMerchant?.businessName || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-2">Applicant Name</label>
-                  <input type="text" readOnly value={selectedMerchant?.applicantName || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
+                  <label htmlFor="drawer-applicantName" className="block text-sm font-semibold text-slate-800 mb-2">Applicant Name</label>
+                  <input id="drawer-applicantName" type="text" readOnly value={selectedMerchant?.applicantName || ''} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-700 focus:outline-none bg-slate-50" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-800 mb-2">Status</label>
+                  <label htmlFor="drawer-status" className="block text-sm font-semibold text-slate-800 mb-2">Status</label>
                   <select 
-                    className={`w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 bg-white capitalize ${
-                      selectedMerchant?.status === 'rejected' ? 'text-red-600 focus:ring-red-500' :
-                      (selectedMerchant?.status === 'active' || selectedMerchant?.status === 'approved') ? 'text-emerald-600 focus:ring-emerald-500' :
-                      'text-orange-600 focus:ring-orange-500'
-                    }`}
-                    value={selectedMerchant?.status === 'active' || selectedMerchant?.status === 'approved' ? 'Approved' : selectedMerchant?.status === 'rejected' ? 'Rejected' : 'Pending'}
+                    id="drawer-status"
+                    className={`w-full border border-slate-300 rounded-lg px-4 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 bg-white capitalize ${getDrawerStatusClass(selectedMerchant?.status)}`}
+                    value={getDrawerStatusValue(selectedMerchant?.status)}
                     onChange={(e) => handleStatusChange(selectedMerchant?.id, e.target.value)}
                   >
                     <option value="Approved">Approved</option>
@@ -478,12 +516,65 @@ const MerchantManagement = () => {
                 <h3 className="text-sm font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">Token Information</h3>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-800 mb-2">Current Token Balance</label>
-                    <input type="text" readOnly value={selectedMerchant?.tokenBalance || '---'} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-lg text-slate-700 focus:outline-none bg-slate-50" />
+                    <label htmlFor="drawer-tokenBalance" className="block text-sm font-semibold text-slate-800 mb-2">Current Token Balance</label>
+                    <input id="drawer-tokenBalance" type="text" readOnly value={selectedMerchant?.tokenBalance || '---'} className="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-lg text-slate-700 focus:outline-none bg-slate-50" />
                   </div>
                   <div>
                     <p className="block text-sm font-semibold text-slate-800 mb-2">Pre-Mint Requested</p>
                     <p className="text-slate-700 font-medium py-2.5">{selectedMerchant?.preMintRequested}</p>
+                  </div>
+                </div>
+
+                {/* Tokens Details Table */}
+                <div className="mt-8">
+                  <h4 className="text-sm font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">Owned Tokens</h4>
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-x-auto shadow-sm">
+                    <table className="w-full text-left text-sm whitespace-nowrap">
+                      <thead className="bg-[#f8fafc] text-slate-700 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-6 py-4">Token UID</th>
+                          <th className="px-6 py-4">Which Token</th>
+                          <th className="px-6 py-4">Token Type</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {selectedMerchant?.tokenDetails && selectedMerchant.tokenDetails.length > 0 ? (
+                          selectedMerchant.tokenDetails.map((token, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 transition-colors text-slate-600 font-medium">
+                              <td className="px-6 py-4">{token.id}</td>
+                              <td className="px-6 py-4 text-slate-900 font-bold">{token.name}</td>
+                              <td className="px-6 py-4">
+                                <span className="bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1 rounded-full text-xs font-semibold">
+                                  {token.type}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <>
+                            {/* Displaying some fallback UI for demonstration */}
+                            <tr className="hover:bg-slate-50 transition-colors text-slate-600 font-medium">
+                              <td className="px-6 py-4">{selectedMerchant?.tokenUid || 'TKN-1029'}</td>
+                              <td className="px-6 py-4 text-slate-900 font-bold">Premium Fuel Token</td>
+                              <td className="px-6 py-4">
+                                <span className="bg-blue-50 text-blue-600 border border-blue-100 px-3 py-1 rounded-full text-xs font-semibold">
+                                  Redeemable
+                                </span>
+                              </td>
+                            </tr>
+                            <tr className="hover:bg-slate-50 transition-colors text-slate-600 font-medium">
+                              <td className="px-6 py-4">TKN-4482</td>
+                              <td className="px-6 py-4 text-slate-900 font-bold">Standard Fuel Token</td>
+                              <td className="px-6 py-4">
+                                <span className="bg-purple-50 text-purple-600 border border-purple-100 px-3 py-1 rounded-full text-xs font-semibold">
+                                  Utility
+                                </span>
+                              </td>
+                            </tr>
+                          </>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -497,9 +588,11 @@ const MerchantManagement = () => {
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop */}
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
           <div 
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setIsAddModalOpen(false)}
+            aria-hidden="true"
           ></div>
 
           {/* Modal Content */}
@@ -521,8 +614,9 @@ const MerchantManagement = () => {
               {outletError && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm">{outletError}</div>}
               
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Outlet Name</label>
+                <label htmlFor="add-outletName" className="block text-sm font-semibold text-slate-800 mb-1.5">Outlet Name</label>
                 <input 
+                  id="add-outletName"
                   type="text" 
                   placeholder="Enter Name" 
                   required
@@ -533,8 +627,9 @@ const MerchantManagement = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Create e-mail ID</label>
+                <label htmlFor="add-email" className="block text-sm font-semibold text-slate-800 mb-1.5">Create e-mail ID</label>
                 <input 
+                  id="add-email"
                   type="email" 
                   placeholder="Create e-mail ID" 
                   required
@@ -545,8 +640,9 @@ const MerchantManagement = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Create Password</label>
+                <label htmlFor="add-password" className="block text-sm font-semibold text-slate-800 mb-1.5">Create Password</label>
                 <input 
+                  id="add-password"
                   type="password" 
                   placeholder="Create Password" 
                   required
@@ -557,8 +653,9 @@ const MerchantManagement = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Location</label>
+                <label htmlFor="add-location" className="block text-sm font-semibold text-slate-800 mb-1.5">Location</label>
                 <input 
+                  id="add-location"
                   type="text" 
                   placeholder="Enter Location" 
                   required
@@ -569,8 +666,9 @@ const MerchantManagement = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Outlet Manager</label>
+                <label htmlFor="add-outletManager" className="block text-sm font-semibold text-slate-800 mb-1.5">Outlet Manager</label>
                 <input 
+                  id="add-outletManager"
                   type="text" 
                   placeholder="Enter Manager Name" 
                   required
@@ -581,8 +679,9 @@ const MerchantManagement = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-slate-800 mb-1.5">Contact Number</label>
+                <label htmlFor="add-contactNumber" className="block text-sm font-semibold text-slate-800 mb-1.5">Contact Number</label>
                 <input 
+                  id="add-contactNumber"
                   type="text" 
                   placeholder="+91-9999999999" 
                   required

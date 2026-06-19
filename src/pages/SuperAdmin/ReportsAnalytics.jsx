@@ -3,18 +3,19 @@ import { useSelector } from 'react-redux';
 import { CircleDollarSign, Receipt, RefreshCcw, UserCheck } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie
 } from 'recharts';
 import axiosInstance from '../../api/axiosInstance';
 
 // --- CUSTOM TOOLTIPS ---
+/* eslint-disable react/prop-types */
 const CustomTransactionTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
+  if (active && payload?.length) {
     return (
       <div className="bg-white border border-slate-200 shadow-lg rounded-xl p-3 text-sm">
         <p className="font-semibold text-slate-800 mb-1">{label}</p>
         {payload.map((entry, index) => (
-          <p key={index} style={{ color: entry.color }} className="font-medium">
+          <p key={entry.name || index} style={{ color: entry.color }} className="font-medium">
             {entry.name === 'transactions' ? 'Transactions' : 'Revenue'} : {entry.value}
           </p>
         ))}
@@ -25,13 +26,13 @@ const CustomTransactionTooltip = ({ active, payload, label }) => {
 };
 
 const CustomFuelTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
+  if (active && payload?.length) {
     return (
       <div className="bg-red-600 text-white shadow-lg rounded-md p-3 text-sm relative">
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-red-600 rotate-45"></div>
         <p className="font-semibold relative z-10 text-center mb-1">Volume</p>
         {payload.map((entry, index) => (
-          <p key={index} className="font-bold relative z-10 text-center">
+          <p key={entry.name || index} className="font-bold relative z-10 text-center">
              {entry.name === 'petrol' ? 'Petrol' : 'Diesel'}: {entry.value}
           </p>
         ))}
@@ -75,9 +76,9 @@ const ReportsAnalytics = () => {
   const { cards, transactionTrends, merchantStatus, fuelTypeDistribution } = data;
 
   const merchantStatusData = [
-    { name: 'Approved', value: merchantStatus.approved || 0, color: '#1877f2' },
-    { name: 'Pending', value: merchantStatus.pending || 0, color: '#f59e0b' },
-    { name: 'Rejected', value: merchantStatus.rejected || 0, color: '#ef4444' },
+    { name: 'Approved', value: merchantStatus.approved || 0, color: '#1877f2', fill: '#1877f2' },
+    { name: 'Pending', value: merchantStatus.pending || 0, color: '#f59e0b', fill: '#f59e0b' },
+    { name: 'Rejected', value: merchantStatus.rejected || 0, color: '#ef4444', fill: '#ef4444' },
   ];
 
   return (
@@ -207,11 +208,7 @@ const ReportsAnalytics = () => {
                   paddingAngle={2}
                   dataKey="value"
                   stroke="none"
-                >
-                  {merchantStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
+                />
                 <RechartsTooltip 
                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   itemStyle={{ fontWeight: 600 }}
@@ -234,8 +231,8 @@ const ReportsAnalytics = () => {
           </div>
           
           <div className="flex justify-center gap-6 mt-4">
-            {merchantStatusData.map((item, idx) => (
-              <div key={idx} className="flex flex-col items-center">
+            {merchantStatusData.map((item) => (
+              <div key={item.name} className="flex flex-col items-center">
                 <div className="flex items-center gap-1.5 mb-1">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }}></div>
                   <span className="text-xs font-semibold text-slate-700">{item.name}</span>

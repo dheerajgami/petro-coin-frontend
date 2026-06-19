@@ -4,6 +4,24 @@ import { Link } from 'react-router-dom';
 import { MapPin, Plus, X } from 'lucide-react';
 import axiosInstance from '../../api/axiosInstance';
 
+const getStatusBadgeClass = (status) => {
+  if (status === 'active') return 'bg-green-100 text-green-700';
+  if (status === 'pending') return 'bg-orange-100 text-orange-700';
+  return 'bg-slate-100 text-slate-700';
+};
+
+const getToastBgClass = (type) => {
+  if (type === 'request') return 'bg-[#ECA12A]';
+  if (type === 'error') return 'bg-red-600';
+  return 'bg-green-600';
+};
+
+const getToastTitle = (type) => {
+  if (type === 'request') return 'Request Submitted';
+  if (type === 'error') return 'Error';
+  return 'Success';
+};
+
 const OutletList = () => {
   const { user } = useSelector((state) => state.auth);
   
@@ -11,6 +29,7 @@ const OutletList = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toastInfo, setToastInfo] = useState({ show: false, message: '', type: 'request' });
 
   const [formData, setFormData] = useState({
     outletName: '',
@@ -26,7 +45,7 @@ const OutletList = () => {
     try {
       setLoading(true);
       const response = await axiosInstance.get('/merchant/outlets');
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         setOutlets(response.data.data);
       }
     } catch (err) {
@@ -66,7 +85,8 @@ const OutletList = () => {
       const response = await axiosInstance.post('/merchant/outlets', payload);
       
       if (response.data) {
-        alert('Outlet created successfully!');
+        setToastInfo({ show: true, message: 'Outlet created successfully!', type: 'request' });
+        setTimeout(() => setToastInfo({ show: false, message: '', type: 'request' }), 3000);
         setIsModalOpen(false);
         // Reset form
         setFormData({
@@ -82,7 +102,8 @@ const OutletList = () => {
       }
     } catch (err) {
       console.error('Failed to create outlet:', err);
-      alert(err.response?.data?.message || 'Failed to create outlet. Please try again.');
+      setToastInfo({ show: true, message: err.response?.data?.message || 'Failed to create outlet.', type: 'error' });
+      setTimeout(() => setToastInfo({ show: false, message: '', type: 'error' }), 3000);
     } finally {
       setIsSubmitting(false);
     }
@@ -93,7 +114,7 @@ const OutletList = () => {
       {/* Welcome Banner */}
       <div className="bg-[#59111c] rounded-xl p-6 relative overflow-hidden shadow-sm">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          Welcome Back, {user?.name ? (user.name.includes('Mr') ? user.name : `Mr. ${user.name}`) : 'Mr. John'} 👋
+          Welcome Back, {user?.username || user?.businessName || user?.name || 'Merchant'} 👋
         </h2>
         <p className="text-red-100 mt-1 text-sm font-medium">Have a good day..</p>
       </div>
@@ -123,11 +144,7 @@ const OutletList = () => {
                       <MapPin className="w-3 h-3 mr-1" /> {outlet.location}
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                    outlet.status === 'active' ? 'bg-green-100 text-green-700' : 
-                    outlet.status === 'pending' ? 'bg-orange-100 text-orange-700' : 
-                    'bg-slate-100 text-slate-700'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${getStatusBadgeClass(outlet.status)}`}>
                     {outlet.status || 'Unknown'}
                   </span>
                 </div>
@@ -206,8 +223,9 @@ const OutletList = () => {
             <div className="p-6">
               <form className="space-y-4" onSubmit={handleCreateOutlet}>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Outlet Name</label>
+                  <label htmlFor="outletName" className="block text-xs font-bold text-slate-800 mb-1.5">Outlet Name</label>
                   <input 
+                    id="outletName"
                     type="text" 
                     name="outletName"
                     value={formData.outletName}
@@ -218,8 +236,9 @@ const OutletList = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Create e-mail ID</label>
+                  <label htmlFor="createEmailId" className="block text-xs font-bold text-slate-800 mb-1.5">Create e-mail ID</label>
                   <input 
+                    id="createEmailId"
                     type="email" 
                     name="createEmailId"
                     value={formData.createEmailId}
@@ -230,8 +249,9 @@ const OutletList = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Create Password</label>
+                  <label htmlFor="createPassword" className="block text-xs font-bold text-slate-800 mb-1.5">Create Password</label>
                   <input 
+                    id="createPassword"
                     type="password" 
                     name="createPassword"
                     value={formData.createPassword}
@@ -243,8 +263,9 @@ const OutletList = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Location</label>
+                  <label htmlFor="location" className="block text-xs font-bold text-slate-800 mb-1.5">Location</label>
                   <input 
+                    id="location"
                     type="text" 
                     name="location"
                     value={formData.location}
@@ -255,8 +276,9 @@ const OutletList = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Outlet Manager</label>
+                  <label htmlFor="outletManager" className="block text-xs font-bold text-slate-800 mb-1.5">Outlet Manager</label>
                   <input 
+                    id="outletManager"
                     type="text" 
                     name="outletManager"
                     value={formData.outletManager}
@@ -267,8 +289,9 @@ const OutletList = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-800 mb-1.5">Contact Number</label>
+                  <label htmlFor="contactNumber" className="block text-xs font-bold text-slate-800 mb-1.5">Contact Number</label>
                   <input 
+                    id="contactNumber"
                     type="text" 
                     name="contactNumber"
                     value={formData.contactNumber}
@@ -294,6 +317,21 @@ const OutletList = () => {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastInfo.show && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 animate-in slide-in-from-top-5 fade-in duration-300 z-[100] ${getToastBgClass(toastInfo.type)}`}>
+          {toastInfo.type === 'error' ? <X className="w-6 h-6" /> : <MapPin className="w-6 h-6" />}
+          <div>
+            <h4 className="font-bold text-sm">
+              {getToastTitle(toastInfo.type)}
+            </h4>
+            <p className={`text-xs ${toastInfo.type === 'request' ? 'text-yellow-50' : 'text-green-100'}`}>
+              {toastInfo.message}
+            </p>
           </div>
         </div>
       )}

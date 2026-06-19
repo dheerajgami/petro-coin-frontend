@@ -18,18 +18,17 @@ const SuperAdminDashboard = () => {
     fuelStationsOverview: []
   });
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
         const response = await axiosInstance.get('/admin/dashboard-summary');
-        if (response.data && response.data.success) {
+        if (response.data?.success) {
           setData(response.data.data);
         }
       } catch (err) {
         console.error("Failed to fetch dashboard data:", err);
-        setError("Failed to load dashboard data");
       } finally {
         setLoading(false);
       }
@@ -85,7 +84,7 @@ const SuperAdminDashboard = () => {
           { label: 'Pending Approvals', value: data?.stats?.pendingApprovals || 0, icon: UserCheck },
           { label: 'System Uptime', value: data?.stats?.systemUptime || "0%", icon: Activity },
         ].map((stat, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
+          <div key={stat.label} className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex items-center justify-between hover:shadow-md transition-shadow">
             <div>
               <h3 className="text-lg font-semibold text-slate-800 mb-1">{stat.label}</h3>
               <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
@@ -111,7 +110,7 @@ const SuperAdminDashboard = () => {
         
         <div className="space-y-4">
           {data.recentMerchants && data.recentMerchants.length > 0 ? data.recentMerchants.map((item, i) => (
-            <div key={i} className="flex items-center justify-between p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors">
+            <div key={item.merchantId} className="flex items-center justify-between p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors">
               <div className="flex gap-6">
                 <span className="text-slate-400 font-medium text-sm mt-1 w-6">{`0${i + 1}`}</span>
                 <div>
@@ -154,7 +153,7 @@ const SuperAdminDashboard = () => {
         
         <div className="space-y-4">
           {data.fuelStationsOverview && data.fuelStationsOverview.length > 0 ? data.fuelStationsOverview.map((item, i) => (
-            <div key={i} className="flex items-center justify-between p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors">
+            <div key={item.stationId} className="flex items-center justify-between p-5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors">
               <div className="flex gap-6">
                 <span className="text-slate-400 font-medium text-sm mt-1 w-6">{`0${i + 1}`}</span>
                 <div>

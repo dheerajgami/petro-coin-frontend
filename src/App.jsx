@@ -6,10 +6,12 @@ import { logout } from './store/slices/authSlice';
 import Login from './components/Login';
 import ProtectedRoute from './components/ProtectedRoute';
 import Unauthorized from './pages/Unauthorized';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Layouts
 import SuperAdminLayout from './layouts/SuperAdminLayout';
 import MerchantLayout from './layouts/MerchantLayout';
+import FuelAdminLayout from './layouts/FuelAdminLayout';
 
 // Pages
 import SuperAdminDashboard from './pages/SuperAdmin/Dashboard';
@@ -22,11 +24,22 @@ import TransactionsManagement from './pages/SuperAdmin/TransactionsManagement';
 import TransporterManagement from './pages/SuperAdmin/TransporterManagement';
 import ReportsAnalytics from './pages/SuperAdmin/ReportsAnalytics';
 import SystemSettings from './pages/SuperAdmin/SystemSettings';
+import MerchantAdminManagement from './pages/SuperAdmin/MerchantAdminManagement';
+import FuelAdminManagement from './pages/SuperAdmin/FuelAdminManagement';
 import FuelAdminDashboard from './pages/FuelAdmin/Dashboard';
+import FuelAdminStationsList from './pages/FuelAdmin/StationsList';
+import FuelAdminStationAnalytics from './pages/FuelAdmin/StationAnalytics';
+import FuelAdminInventory from './pages/FuelAdmin/Inventory';
+import FuelAdminSettlements from './pages/FuelAdmin/Settlements';
+import FuelAdminTransactions from './pages/FuelAdmin/Transactions';
+import FuelAdminSettings from './pages/FuelAdmin/Settings';
 import MerchantDashboard from './pages/Merchant/Dashboard';
 import OutletList from './pages/Merchant/OutletList';
 import OutletAnalytics from './pages/Merchant/OutletAnalytics';
 import InventoryManagement from './pages/Merchant/InventoryManagement';
+import Transactions from './pages/Merchant/Transactions';
+import Settings from './pages/Merchant/Settings';
+import Support from './pages/Merchant/Support';
 import TransportDashboard from './pages/Transport/Dashboard';
 
 function App() {
@@ -45,9 +58,8 @@ function App() {
     if (!user) return '/login';
     // Backend API aapko 'admin' return kar raha hai Super Admin ke liye
     switch (user.role) {
-      case 'admin': 
-      case 'super_admin': return '/super-admin';
-      case 'fuel_admin': return '/fuel-admin';
+      case 'admin': return '/super-admin';
+      case 'fuel': return '/fuel-admin';
       case 'merchant': return '/merchant';
       case 'transport': return '/transport';
       default: return '/login';
@@ -55,79 +67,95 @@ function App() {
   };
 
   return (
-    <Router>
-      <Routes>
-        {/* Public Login Route */}
-        <Route 
-          path="/login" 
-          element={(!isAuthenticated || !user) ? <Login /> : <Navigate to={getDashboardRoute()} />} 
-        />
-        
-        {/* Super Admin Routes */}
-        <Route 
-          path="/super-admin" 
-          element={
-            <ProtectedRoute allowedRoles={['admin', 'super_admin']}>
-              <SuperAdminLayout />
-            </ProtectedRoute>
-          } 
-        >
-          <Route index element={<SuperAdminDashboard />} />
-          <Route path="merchants" element={<MerchantManagement />} />
-          <Route path="customers" element={<CustomerManagement />} />
-          <Route path="fuel-stations" element={<FuelStationManagement />} />
-          <Route path="compliance" element={<ComplianceManagement />} />
-          <Route path="tokens" element={<TokenManagement />} />
-          <Route path="transactions" element={<TransactionsManagement />} />
-          <Route path="transporters" element={<TransporterManagement />} />
-          <Route path="reports" element={<ReportsAnalytics />} />
-          <Route path="settings" element={<SystemSettings />} />
-          {/* Add more nested routes for super-admin here later */}
-        </Route>
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+          {/* Public Login Route */}
+          <Route
+            path="/login"
+            element={(!isAuthenticated || !user) ? <Login /> : <Navigate to={getDashboardRoute()} />}
+          />
 
-        {/* Fuel Admin Routes */}
-        <Route 
-          path="/fuel-admin/*" 
-          element={
-            <ProtectedRoute allowedRoles={['fuel_admin']}>
-              <FuelAdminDashboard />
-            </ProtectedRoute>
-          } 
-        />
+          {/* Super Admin Routes */}
+          <Route
+            path="/super-admin"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <SuperAdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<SuperAdminDashboard />} />
+            <Route path="merchants" element={<MerchantManagement />} />
+            <Route path="customers" element={<CustomerManagement />} />
+            <Route path="fuel-stations" element={<FuelStationManagement />} />
+            <Route path="tokens" element={<TokenManagement />} />
+            <Route path="transactions" element={<TransactionsManagement />} />
+            <Route path="transporters" element={<TransporterManagement />} />
+            <Route path="compliance" element={<ComplianceManagement />} />
+            <Route path="merchant-admin" element={<MerchantAdminManagement />} />
+            <Route path="fuel-admin" element={<FuelAdminManagement />} />
+            <Route path="reports" element={<ReportsAnalytics />} />
+            <Route path="settings" element={<SystemSettings />} />
+            {/* Add more nested routes for super-admin here later */}
+          </Route>
 
-        {/* Merchant Routes */}
-        <Route 
-          path="/merchant" 
-          element={
-            <ProtectedRoute allowedRoles={['merchant']}>
-              <MerchantLayout />
-            </ProtectedRoute>
-          } 
-        >
-          <Route index element={<MerchantDashboard />} />
-          <Route path="outlets" element={<OutletList />} />
-          <Route path="outlets/:id" element={<OutletAnalytics />} />
-          <Route path="inventory" element={<InventoryManagement />} />
-          {/* Add more nested routes for merchant here later */}
-        </Route>
+          {/* Fuel Admin Routes */}
+          <Route
+            path="/fuel-admin"
+            element={
+              <ProtectedRoute allowedRoles={['fuel']}>
+                <FuelAdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<FuelAdminDashboard />} />
+            <Route path="stations" element={<FuelAdminStationsList />} />
+            <Route path="stations/:id" element={<FuelAdminStationAnalytics />} />
+            <Route path="inventory" element={<FuelAdminInventory />} />
+            <Route path="settlements" element={<FuelAdminSettlements />} />
+            <Route path="transactions" element={<FuelAdminTransactions />} />
+            <Route path="settings" element={<FuelAdminSettings />} />
+            {/* Add more nested routes for fuel-admin here later */}
+          </Route>
 
-        {/* Transport Routes */}
-        <Route 
-          path="/transport/*" 
-          element={
-            <ProtectedRoute allowedRoles={['transport']}>
-              <TransportDashboard />
-            </ProtectedRoute>
-          } 
-        />
-        
-        <Route path="/unauthorized" element={<Unauthorized />} />
+          {/* Merchant Routes */}
+          <Route
+            path="/merchant"
+            element={
+              <ProtectedRoute allowedRoles={['merchant']}>
+                <MerchantLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<MerchantDashboard />} />
+            <Route path="outlets" element={<OutletList />} />
+            <Route path="outlets/:id" element={<OutletAnalytics />} />
+            <Route path="inventory" element={<InventoryManagement />} />
+            <Route path="transactions" element={<Transactions />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="support" element={<Support />} />
+            {/* Add more nested routes for merchant here later */}
+          </Route>
 
-        {/* Catch-all Route */}
-        <Route path="*" element={(!isAuthenticated || !user) ? <Navigate to="/login" /> : <Navigate to={getDashboardRoute()} />} />
-      </Routes>
-    </Router>
-  )
+          {/* Transport Routes */}
+          <Route
+            path="/transport/*"
+            element={
+              <ProtectedRoute allowedRoles={['transport']}>
+                <TransportDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/unauthorized" element={<Unauthorized />} />
+
+          {/* Catch-all Route */}
+          <Route path="*" element={(!isAuthenticated || !user) ? <Navigate to="/login" /> : <Navigate to={getDashboardRoute()} />} />
+        </Routes>
+      </Router>
+    </ErrorBoundary>
+  );
 }
 
-export default App
+export default App;
